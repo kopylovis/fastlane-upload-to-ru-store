@@ -1,0 +1,28 @@
+# .github/workflows/release.yml
+name: Release Gem
+
+# Срабатывает только на теги вида vX.Y.Z
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    name: Publish Gem to RubyGems
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Publish to RubyGems
+        uses: rubygems/release-gem@v1
+        with:
+          api-key: ${{ secrets.RUBYGEMS_API_KEY }}
