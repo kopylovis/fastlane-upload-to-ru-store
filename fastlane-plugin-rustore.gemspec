@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.email = 'mnrhwow@gmail.com'
 
   spec.summary = 'Fastlane plugin to upload Android builds to RuStore'
-  spec.homepage = 'https://github.com/stfbee/fastlane-plugin-upload_to_ru_store'
+  spec.homepage = 'https://github.com/kopylovis/fastlane-upload-to-ru-store'
   spec.license = 'MIT'
 
   spec.files = Dir['lib/**/*'] + %w(README.md LICENSE)

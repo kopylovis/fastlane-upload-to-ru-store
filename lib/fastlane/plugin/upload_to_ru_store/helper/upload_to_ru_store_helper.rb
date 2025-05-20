@@ -23,13 +23,19 @@ module Fastlane
         # @return [String] JWE token
         def fetch_token(key_id:, private_key:)
           timestamp = DateTime.now.iso8601(3)
-          signature = rsa_sign(key_id: key_id, timestamp: timestamp, private_key: private_key)
-
+          signature = rsa_sign(
+            key_id: key_id,
+            timestamp: timestamp,
+            private_key: private_key
+          )
           response = client.post('/public/auth/') do |req|
             req.body = { keyId: key_id, timestamp: timestamp, signature: signature }
           end
           debug(response)
-          response.dig('body', 'jwe') || UI.user_error!('Не удалось получить токен из RuStore')
+          data = response.body
+          jwe = data.dig('body', 'jwe')
+          UI.user_error!('Не удалось получить токен из RuStore') unless jwe
+          jwe
         end
 
         # Remove all existing drafts for package
@@ -47,10 +53,14 @@ module Fastlane
         # @param publish_type [String, nil]
         # @param changelog_path [String, nil]
         # @return [Integer] draft_id
-        def create_draft(token:, package_name:, publish_type: nil, changelog_path: nil)
+        def create_draft(token:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil)
           payload = {}
           payload[:publishType] = publish_type if publish_type
-          payload[:whatsNew]    = read_changelog(changelog_path) if changelog_path
+          if publish_type == 'DELAYED'
+            UI.user_error!('Для publish_type = DELAYED обязательно указывать publish_datetime') unless publish_datetime
+            payload[:publishDateTime] = publish_datetime
+          end
+          payload[:whatsNew] = read_changelog(changelog_path) if changelog_path
 
           response = client.post("/public/v1/application/#{package_name}/version") do |req|
             req.headers['Public-Token'] = token
@@ -74,7 +84,7 @@ module Fastlane
           response = client.post(endpoint) do |req|
             req.headers['Public-Token'] = token
             req.params['servicesType'] = service_type if service_type
-            req.params['isMainApk']    = true if service_type == 'GMS'
+            req.params['isMainApk'] = true if service_type == 'GMS'
             req.body = { file: part }
           end
           debug(response)
@@ -112,9 +122,24 @@ module Fastlane
 
         # Sign payload with RSA-SHA512
         def rsa_sign(key_id:, timestamp:, private_key:)
-          rsa = OpenSSL::PKey::RSA.new(private_key)
-          sig = rsa.sign(OpenSSL::Digest::SHA512.new, key_id + timestamp)
-          Base64.strict_encode64(sig)
+          raw = private_key.strip
+          pem = if raw.include?('-----BEGIN')
+                  raw
+                else
+                  b64 = raw.gsub(/\s+/, '')
+                  body = b64.scan(/.{1,64}/).join("\n")
+                  <<~PEM
+                    -----BEGIN RSA PRIVATE KEY-----
+                    #{body}
+                    -----END RSA PRIVATE KEY-----
+                  PEM
+                end
+
+          key = OpenSSL::PKey::RSA.new(pem)
+          digest = OpenSSL::Digest::SHA512.new
+          signature = key.sign(digest, key_id + timestamp)
+
+          Base64.strict_encode64(signature)
         end
 
         # List draft IDs

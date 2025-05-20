@@ -1,6 +1,6 @@
 require 'fastlane/action'
 require 'fastlane_core/ui/ui'
-require_relative 'upload_to_ru_store_helper'
+require_relative '../helper/upload_to_ru_store_helper'
 
 module Fastlane
   module Actions
@@ -11,19 +11,81 @@ module Fastlane
       end
 
       def self.description
-        'Uploads AAB and optional APK bundles to RuStore, cleans up drafts before publishing.'
+        'Uploads AAB/APK release to RuStore'
       end
 
       def self.available_options
         [
-          FastlaneCore::ConfigItem.new(key: :package_name, env_name: 'RUSTORE_PACKAGE_NAME', description: 'App package (e.g. com.example.app)', optional: false, type: String),
-          FastlaneCore::ConfigItem.new(key: :key_id, env_name: 'RUSTORE_KEY_ID', description: 'RuStore API key ID', optional: false, type: String),
-          FastlaneCore::ConfigItem.new(key: :private_key, env_name: 'RUSTORE_PRIVATE_KEY', description: 'RUStore RSA private key (PEM)', optional: false, type: String),
-          FastlaneCore::ConfigItem.new(key: :publish_type, env_name: 'RUSTORE_PUBLISH_TYPE', description: 'Publication type: MANUAL/DELAYED/INSTANTLY', optional: true, type: String),
-          FastlaneCore::ConfigItem.new(key: :aab, env_name: 'RUSTORE_AAB', description: 'Path to AAB', optional: true, type: String),
-          FastlaneCore::ConfigItem.new(key: :gms_apk, env_name: 'RUSTORE_GMS_APK', description: 'Path to GMS APK', optional: true, type: String),
-          FastlaneCore::ConfigItem.new(key: :hms_apk, env_name: 'RUSTORE_HMS_APK', description: 'Path to HMS APK (optional)', optional: true, type: String),
-          FastlaneCore::ConfigItem.new(key: :changelog_path, env_name: 'RUSTORE_CHANGELOG_PATH', description: 'Path to changelog .txt', optional: true, type: String)
+          FastlaneCore::ConfigItem.new(
+            key: :package_name,
+            env_name: 'RUSTORE_PACKAGE_NAME',
+            description: 'App package (e.g. com.example.app)',
+            optional: false,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :key_id,
+            env_name: 'RUSTORE_KEY_ID',
+            description: 'RuStore API key ID',
+            optional: false,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :private_key,
+            env_name: 'RUSTORE_PRIVATE_KEY',
+            description: 'RUStore RSA private key (PEM)',
+            optional: false,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :publish_type,
+            env_name: 'RUSTORE_PUBLISH_TYPE',
+            description: 'Publication type: MANUAL/DELAYED/INSTANTLY',
+            optional: true,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :publish_datetime,
+            env_name: 'RUSTORE_PUBLISH_DATETIME',
+            description: "Дата и время отложенной публикации в формате yyyy-MM-dd'T'HH:mm:ssXXX (только для publish_type = DELAYED)",
+            optional: true,
+            type: String,
+            verify_block: proc do |value|
+              begin
+                DateTime.iso8601(value)
+              rescue ArgumentError
+                UI.user_error!("Неверный формат publish_datetime. Ожидается ISO8601, например 2025-06-01T12:00:00+03:00")
+              end
+            end
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :aab,
+            env_name: 'RUSTORE_AAB',
+            description: 'Path to AAB',
+            optional: true,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :gms_apk,
+            env_name: 'RUSTORE_GMS_APK',
+            description: 'Path to GMS APK',
+            optional: true,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :hms_apk,
+            env_name: 'RUSTORE_HMS_APK',
+            description: 'Path to HMS APK (optional)',
+            optional: true,
+            type: String
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :changelog_path,
+            env_name: 'RUSTORE_CHANGELOG_PATH',
+            description: 'Path to changelog .txt',
+            optional: true,
+            type: String
+          )
         ]
       end
 
