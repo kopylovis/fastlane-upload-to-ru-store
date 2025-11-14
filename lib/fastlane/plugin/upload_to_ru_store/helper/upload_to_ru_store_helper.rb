@@ -117,6 +117,8 @@ module Fastlane
             f.response :logger, Logger.new($stderr, level: Logger::DEBUG)
             f.use FaradayMiddleware::FollowRedirects
             f.adapter :net_http
+            f.options.timeout = 600
+            f.options.open_timeout = 30
           end
         end
 
