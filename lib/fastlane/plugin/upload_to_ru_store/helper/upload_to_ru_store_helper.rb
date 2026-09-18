@@ -1,201 +1,154 @@
 require 'fastlane_core/ui/ui'
-require 'faraday'
-require 'faraday_middleware'
-require 'openssl'
-require 'base64'
-require 'date'
-require 'json'
+require 'logger'
+require_relative 'rustore/api'
+require_relative 'rustore/client'
+require_relative 'rustore/errors'
+require_relative 'rustore/signer'
 
 module Fastlane
-  UI = FastlaneCore::UI
-
   module Helper
-    # Helper for Fastlane plugin "upload_to_ru_store"
-    # Encapsulates authentication, draft management, upload and commit operations
     class UploadToRuStoreHelper
-      BASE_URL = 'https://public-api.rustore.ru'.freeze
-      DEFAULT_PAGE_SIZE = 100
+      BASE_URL = Rustore::Client::BASE_URL
+      PUBLISH_TYPES = Rustore::Api::PUBLISH_TYPES
+      PARTIAL_VALUES = Rustore::Api::PARTIAL_VALUES
+      AGE_LEGAL = Rustore::Api::AGE_LEGAL
+      APP_TYPES = Rustore::Api::APP_TYPES
+      TESTING_TYPES = Rustore::Api::TESTING_TYPES
+      BUILD_TYPES = Rustore::Api::BUILD_TYPES
+      CHANGELOG_LIMIT = Rustore::Api::LIMITS[:whats_new]
 
       class << self
-        # Obtain JWE token using RSA-SHA512 signature
-        # @param key_id [String] API key identifier
-        # @param private_key [String] PEM-formatted RSA private key
-        # @return [String] JWE token
+        def api(key_id: nil, private_key: nil, token: nil, timeout: nil)
+          instance = Rustore::Api.new(client: build_client(timeout))
+          if token
+            instance.client.token = token
+          elsif key_id && private_key
+            wrap { instance.authenticate(Rustore::Signer.new(key_id: key_id, private_key: private_key)) }
+          end
+          instance
+        end
+
         def fetch_token(key_id:, private_key:)
-          timestamp = DateTime.now.iso8601(3)
-          signature = rsa_sign(
-            key_id: key_id,
-            timestamp: timestamp,
-            private_key: private_key
-          )
-          response = client.post('/public/auth/') do |req|
-            req.body = { keyId: key_id, timestamp: timestamp, signature: signature }
+          wrap do
+            signer = Rustore::Signer.new(key_id: key_id, private_key: private_key)
+            Rustore::Api.new(client: shared_client).authenticate(signer)
           end
-          debug(response)
-          data = response.body
-          jwe = data.dig('body', 'jwe')
-          UI.user_error!('Не удалось получить токен из RuStore') unless jwe
-          jwe
         end
 
-        # Remove all existing drafts for package
-        # @param token [String]
-        # @param package_name [String]
         def remove_drafts(token:, package_name:)
-          draft_ids(token: token, package_name: package_name).each do |id|
-            delete_draft(token: token, package_name: package_name, draft_id: id)
+          instance = with_token(token)
+          wrap do
+            drafts = instance.versions_with_status(package_name, Rustore::Api::STATUS_DRAFT)
+            UI.message("Черновиков к удалению: #{drafts.size}") unless drafts.empty?
+            drafts.each do |draft|
+              id = draft['versionId']
+              response = instance.delete_draft(package_name, id)
+              if response.success? || response.status == 204
+                UI.message("Удалён черновик ##{id}")
+              else
+                UI.important("Не удалось удалить черновик ##{id}: #{response.message || response.preview}")
+              end
+            end
           end
         end
 
-        # Create new draft version, optionally with changelog and publish type
-        # @param token [String]
-        # @param package_name [String]
-        # @param publish_type [String, nil]
-        # @param changelog_path [String, nil]
-        # @return [Integer] draft_id
-        def create_draft(token:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil)
-          payload = {}
-          payload[:publishType] = publish_type if publish_type
-          if publish_type == 'DELAYED'
-            UI.user_error!('Для publish_type = DELAYED обязательно указывать publish_datetime') unless publish_datetime
-            payload[:publishDateTime] = publish_datetime
+        def create_draft(token:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil, **attributes)
+          instance = with_token(token)
+          wrap do
+            payload = attributes.merge(publish_type: publish_type, publish_datetime: publish_datetime)
+            payload[:whats_new] = read_changelog(changelog_path) if changelog_path
+            instance.create_draft(package_name, payload)
           end
-          payload[:whatsNew] = read_changelog(changelog_path) if changelog_path
-
-          response = client.post("/public/v1/application/#{package_name}/version") do |req|
-            req.headers['Public-Token'] = token
-            req.body = payload
-          end
-          debug(response)
-          extract_draft_id(response)
         end
 
-        # Upload application build (APK or AAB)
-        # @param token [String]
-        # @param draft_id [Integer]
-        # @param file_path [String]
-        # @param package_name [String]
-        # @param build_type ['apk','aab']
-        # @param service_type ['GMS','HMS',nil]
         def upload_build(token:, draft_id:, file_path:, package_name:, build_type:, service_type: nil)
-          endpoint = "/public/v1/application/#{package_name}/version/#{draft_id}/#{build_type}"
-          part = Faraday::Multipart::FilePart.new(file_path, mime_type(build_type))
-
-          response = client.post(endpoint) do |req|
-            req.headers['Public-Token'] = token
-            req.params['servicesType'] = service_type if service_type
-            req.params['isMainApk'] = true if service_type == 'GMS'
-            req.body = { file: part }
-          end
-          debug(response)
-
-          if response.body.dig('message')&.include?('must be larger')
-            UI.user_error!('Сборка с таким versionCode уже была загружена ранее')
+          instance = with_token(token)
+          wrap do
+            instance.upload_build(
+              package_name, draft_id,
+              file_path: file_path, build_type: build_type, service_type: service_type
+            )
+            UI.success("Загружено: #{File.basename(file_path)}")
           end
         end
 
-        # Commit the draft to publish
-        # @param token [String]
-        # @param draft_id [Integer]
-        # @param package_name [String]
-        def commit_draft(token:, draft_id:, package_name:)
-          response = client.post("/public/v1/application/#{package_name}/version/#{draft_id}/commit") do |req|
-            req.headers['Public-Token'] = token
+        def commit_draft(token:, draft_id:, package_name:, priority_update: nil)
+          instance = with_token(token)
+          wrap do
+            instance.commit(package_name, draft_id, priority_update: priority_update)
+            UI.success("Черновик ##{draft_id} отправлен на модерацию")
           end
-          debug(response)
+        end
+
+        def publish_version(token:, package_name:, version_id:)
+          instance = with_token(token)
+          wrap do
+            instance.publish(package_name, version_id)
+            UI.success("Версия ##{version_id} опубликована")
+          end
+        end
+
+        def archive_version(token:, package_name:, version_id:)
+          instance = with_token(token)
+          wrap do
+            instance.archive(package_name, version_id)
+            UI.success("Версия ##{version_id} архивирована")
+          end
+        end
+
+        def update_publish_settings(token:, package_name:, version_id:, **settings)
+          instance = with_token(token)
+          wrap do
+            instance.update_publish_settings(package_name, version_id, **settings)
+            UI.success("Настройки публикации версии ##{version_id} обновлены")
+          end
+        end
+
+        def latest_version(token:, package_name:, testing_type: 'ALL')
+          instance = with_token(token)
+          wrap { instance.latest_version(package_name, testing_type: testing_type) }
+        end
+
+        def read_changelog(path)
+          raise Rustore::ConfigurationError, "файл changelog не найден: #{path}" unless File.file?(path)
+
+          text = File.read(path)
+          if text.length > CHANGELOG_LIMIT
+            raise Rustore::ConfigurationError,
+                  "changelog длиннее #{CHANGELOG_LIMIT} символов (сейчас #{text.length})"
+          end
+          text
+        end
+
+        def reset!
+          @shared_client = nil
+        end
+
+        def debug?
+          !ENV['RUSTORE_DEBUG'].to_s.empty? || !ENV['DEBUG'].to_s.empty?
         end
 
         private
 
-        # Initialize Faraday client
-        def client
-          @client ||= Faraday.new(url: BASE_URL) do |f|
-            f.request :multipart
-            f.request :json
-            f.request :url_encoded
-            f.response :json, content_type: /\bjson$/
-            f.response :logger, Logger.new($stderr, level: Logger::DEBUG)
-            f.use FaradayMiddleware::FollowRedirects
-            f.adapter :net_http
-            f.options.timeout = 600
-            f.options.open_timeout = 30
-          end
+        def with_token(token)
+          shared_client.token = token
+          Rustore::Api.new(client: shared_client)
         end
 
-        # Sign payload with RSA-SHA512
-        def rsa_sign(key_id:, timestamp:, private_key:)
-          raw = private_key.strip
-          pem = if raw.include?('-----BEGIN')
-                  raw
-                else
-                  b64 = raw.gsub(/\s+/, '')
-                  body = b64.scan(/.{1,64}/).join("\n")
-                  <<~PEM
-                    -----BEGIN RSA PRIVATE KEY-----
-                    #{body}
-                    -----END RSA PRIVATE KEY-----
-                  PEM
-                end
-
-          key = OpenSSL::PKey::RSA.new(pem)
-          digest = OpenSSL::Digest::SHA512.new
-          signature = key.sign(digest, key_id + timestamp)
-
-          Base64.strict_encode64(signature)
+        def shared_client
+          @shared_client ||= build_client(nil)
         end
 
-        # List draft IDs
-        def draft_ids(token:, package_name:)
-          resp = client.get("/public/v1/application/#{package_name}/version") do |req|
-            req.headers['Public-Token'] = token
-            req.params['filterTestingType'] = 'ALL'
-            req.params['page'] = 0
-            req.params['size'] = DEFAULT_PAGE_SIZE
-          end
-          resp.body.dig('body', 'content').to_a
-              .select { |v| v['versionStatus'] == 'DRAFT' }
-              .map { |v| v['versionId'] }
+        def build_client(timeout)
+          options = { logger: (Logger.new($stderr, level: Logger::DEBUG) if debug?) }
+          options[:timeout] = timeout if timeout
+          Rustore::Client.new(**options)
         end
 
-        # Delete a single draft
-        def delete_draft(token:, package_name:, draft_id:)
-          resp = client.delete("/public/v1/application/#{package_name}/version/#{draft_id}") do |req|
-            req.headers['Public-Token'] = token
-          end
-          if resp.status == 204
-            UI.message("Deleted draft ##{draft_id}")
-          else
-            UI.important("Failed to delete draft ##{draft_id}: #{resp.body['message']}")
-          end
-        end
-
-        # Read changelog and validate length
-        def read_changelog(path)
-          text = File.read(path)
-          UI.user_error!('Файл Что нового? более 500 символов') if text.size > 500
-          text
-        end
-
-        # Parse draft ID from create response
-        def extract_draft_id(response)
-          body = response.body
-          return body['body'] if body['body']
-          return body['message'][/\d+/].to_i if body['message']
-          UI.user_error!('Не удалось получить draftId из RuStore')
-        end
-
-        # Determine MIME type
-        def mime_type(type)
-          case type
-          when 'aab' then 'application/x-authorware-bin'
-          when 'apk' then 'application/vnd.android.package-archive'
-          else UI.user_error!("Неизвестный тип сборки: #{type}")
-          end
-        end
-
-        # Log response body when DEBUG
-        def debug(response)
-          UI.message("Debug: #{response.body}") if ENV['DEBUG']
+        def wrap
+          yield
+        rescue Rustore::Error => e
+          UI.user_error!("RuStore: #{e}")
         end
       end
     end

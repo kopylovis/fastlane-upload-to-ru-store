@@ -1,5 +1,4 @@
-# .github/workflows/release.yml
-name: 📦 Release Gem
+name: Release Gem
 
 on:
   push:
@@ -7,22 +6,26 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish:
-    name: 🚀 Publish to RubyGems
-    runs-on: macos-latest
+    name: Publish to RubyGems
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.0'
+          ruby-version: '3.3'
           bundler-cache: true
+
+      - name: RSpec
+        run: bundle exec rspec
+
+      - name: RuboCop
+        run: bundle exec rubocop --parallel
 
       - name: Configure RubyGems credentials
         run: |
@@ -37,3 +40,7 @@ jobs:
         run: |
           bundle exec rake build
           gem push pkg/*.gem
+
+      - name: Clean credentials
+        if: always()
+        run: rm -f ~/.gem/credentials
