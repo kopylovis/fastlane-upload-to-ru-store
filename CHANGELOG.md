@@ -39,8 +39,9 @@
 ### Изменено
 - Код разделён на слои: `Rustore::Signer`, `Rustore::Client`, `Rustore::Api`
   и фасад `UploadToRuStoreHelper`, сохраняющий прежний публичный интерфейс.
-- Минимальная версия Ruby — 3.1.
-- CI переведён на Ruby 3.1/3.3/3.4 и `actions/checkout@v4`.
+- Минимальная версия Ruby — 3.2: зависимости fastlane (google-apis-*, googleauth,
+  signet, excon) больше не собираются на 3.1.
+- CI переведён на Ruby 3.2/3.3/3.4 и `actions/checkout@v4`.
 
 ## [1.0.7]
 

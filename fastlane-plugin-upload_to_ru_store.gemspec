@@ -22,7 +22,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir['lib/**/*'] + %w[README.md LICENSE CHANGELOG.md]
   spec.require_paths = ['lib']
 
-  spec.required_ruby_version = '>= 3.1'
+  spec.required_ruby_version = '>= 3.2'
 
   spec.add_dependency 'faraday', '~> 2.0'
   spec.add_dependency 'faraday-follow_redirects', '~> 0.3'

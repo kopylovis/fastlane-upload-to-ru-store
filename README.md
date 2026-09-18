@@ -33,7 +33,7 @@ Fastlane-плагин для публикации Android-приложений �
 fastlane add_plugin upload_to_ru_store
 ```
 
-Требуется Ruby >= 3.1 и fastlane >= 2.240.
+Требуется Ruby >= 3.2 и fastlane >= 2.240.
 
 ---
 
@@ -381,7 +381,7 @@ RUSTORE_DEBUG=1 bundle exec fastlane publish_to_rustore
 - `publish_type: "DELAYED"` наконец работает — в 1.0.x `publish_datetime`
   не доходил до API, и вызов всегда падал;
 - лимит changelog поднят с 500 до документированных API 5000 символов;
-- минимальная версия Ruby — 3.1;
+- минимальная версия Ruby — 3.2: дерево зависимостей fastlane требует её;
 - HTTP-лог больше не печатается без запроса, включается через `RUSTORE_DEBUG`.
 
 ---
