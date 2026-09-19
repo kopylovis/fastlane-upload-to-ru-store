@@ -4,17 +4,25 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release, e.g. v1.1.0'
+        required: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
-    name: Publish to RubyGems
+    name: Publish
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -27,7 +35,39 @@ jobs:
       - name: RuboCop
         run: bundle exec rubocop --parallel
 
+      - name: Resolve version
+        id: version
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "number=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes
+        id: notes
+        run: |
+          version="${{ steps.version.outputs.number }}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Раздел для $version не найден в CHANGELOG.md" > RELEASE_NOTES.md
+          fi
+          cat RELEASE_NOTES.md
+
+      - name: Check RubyGems
+        id: published
+        run: |
+          version="${{ steps.version.outputs.number }}"
+          if gem list --remote --exact fastlane-plugin-upload_to_ru_store --all | grep -q "\b$version\b"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure RubyGems credentials
+        if: steps.published.outputs.exists == 'false'
         run: |
           mkdir -p ~/.gem
           cat <<EOF > ~/.gem/credentials
@@ -37,6 +77,7 @@ jobs:
           chmod 0600 ~/.gem/credentials
 
       - name: Build and push gem
+        if: steps.published.outputs.exists == 'false'
         run: |
           bundle exec rake build
           gem push pkg/*.gem
@@ -44,3 +85,14 @@ jobs:
       - name: Clean credentials
         if: always()
         run: rm -f ~/.gem/credentials
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$tag" --title "$tag" --notes-file RELEASE_NOTES.md
+          fi
