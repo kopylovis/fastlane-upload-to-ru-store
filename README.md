@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" width="128" height="128" alt="" /></p>
+
 # fastlane-plugin-upload_to_ru_store
 
 [![fastlane Plugin Badge](https://rawcdn.githack.com/fastlane/fastlane/master/fastlane/assets/plugin-badge.svg)](https://rubygems.org/gems/fastlane-plugin-upload_to_ru_store)
