@@ -57,6 +57,23 @@ module Fastlane
           end
         end
 
+        def edit_draft(api:, package_name:, version_id: nil, changelog_path: nil, **attributes)
+          wrap do
+            attributes[:whats_new] = read_changelog(changelog_path) if changelog_path
+            id = version_id || current_draft_id(api, package_name)
+            api.edit_draft(package_name, id, **attributes)
+            UI.success("Черновик ##{id} обновлен")
+            id
+          end
+        end
+
+        def delete_draft(api:, package_name:, version_id:)
+          wrap do
+            api.delete_draft(package_name, version_id).ensure_success!
+            UI.success("Удален черновик ##{version_id}")
+          end
+        end
+
         def upload_build(api:, draft_id:, file_path:, package_name:, build_type:, service_type: nil)
           wrap do
             api.upload_build(
@@ -156,6 +173,13 @@ module Fastlane
         end
 
         private
+
+        def current_draft_id(api, package_name)
+          drafts = api.versions_with_status(package_name, Rustore::Api::STATUS_DRAFT)
+          raise Rustore::ConfigurationError, "у #{package_name} нет черновика" if drafts.empty?
+
+          drafts.max_by { |draft| draft['versionId'].to_i }['versionId']
+        end
 
         def wrap
           yield

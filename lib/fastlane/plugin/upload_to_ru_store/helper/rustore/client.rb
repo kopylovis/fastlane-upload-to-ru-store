@@ -51,6 +51,10 @@ module Fastlane
           request(:post, path, body: body, params: params, context: context)
         end
 
+        def patch(path, body: nil, params: {}, context: nil)
+          request(:patch, path, body: body, params: params, context: context)
+        end
+
         def delete(path, params: {}, context: nil)
           request(:delete, path, params: params, context: context)
         end

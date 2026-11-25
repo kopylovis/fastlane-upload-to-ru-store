@@ -184,6 +184,30 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
     end
   end
 
+  describe '.edit_draft' do
+    it 'patches the current draft through the v2 API' do
+      drafts = { body: { content: [{ versionId: 31, versionStatus: 'DRAFT' }] } }
+      stub_request(:get, "#{base}/public/v1/application/#{pkg}/version").with(query: hash_including({}))
+                                                                        .to_return(SpecHelper.json(drafts))
+      patch = stub_request(:patch, "#{base}/public/v2/application/#{pkg}/version/31")
+              .with(body: { shortDescription: 'Новое', categories: ['news'] })
+              .to_return(SpecHelper.json(body: 31))
+
+      id = described_class.edit_draft(api: api, package_name: pkg, short_description: 'Новое', categories: ['news'])
+
+      expect(id).to eq(31)
+      expect(patch).to have_been_requested
+    end
+
+    it 'fails when the package has no draft' do
+      stub_request(:get, "#{base}/public/v1/application/#{pkg}/version").with(query: hash_including({}))
+                                                                        .to_return(SpecHelper.json(body: { content: [] }))
+
+      expect { described_class.edit_draft(api: api, package_name: pkg, app_name: 'x') }
+        .to raise_error(fastlane_error, /нет черновика/)
+    end
+  end
+
   describe '.archive_version' do
     let(:detail_url) { "#{base}/public/v2/application/#{pkg}/version/5" }
 
