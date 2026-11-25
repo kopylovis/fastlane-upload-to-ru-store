@@ -43,7 +43,7 @@ module Fastlane
           Options.publish_type,
           Options.publish_datetime,
           Options.partial_value,
-          Options.timeout,
+          *Options.connection,
           Options.existing_file(:aab, 'RUSTORE_AAB', 'Path to the AAB'),
           Options.existing_file(:gms_apk, 'RUSTORE_GMS_APK', 'Path to the GMS APK'),
           Options.existing_file(:hms_apk, 'RUSTORE_HMS_APK', 'Path to the HMS APK'),
@@ -175,11 +175,11 @@ module Fastlane
         package_name = params[:package_name]
         validate_sources!(params)
 
-        token = helper.fetch_token(key_id: params[:key_id], private_key: params[:private_key])
-        helper.remove_drafts(token: token, package_name: package_name) if params[:remove_existing_drafts]
+        api = helper.session(params)
+        helper.remove_drafts(api: api, package_name: package_name) if params[:remove_existing_drafts]
 
         draft_id = helper.create_draft(
-          token: token,
+          api: api,
           package_name: package_name,
           publish_type: params[:publish_type],
           publish_datetime: params[:publish_datetime],
@@ -188,8 +188,8 @@ module Fastlane
         )
         UI.message("Создан черновик ##{draft_id}")
 
-        upload_builds(helper, token, draft_id, params)
-        finish(helper, token, draft_id, params)
+        upload_builds(helper, api, draft_id, params)
+        finish(helper, api, draft_id, params)
 
         Actions.lane_context[SharedValues::RUSTORE_VERSION_ID] = draft_id
         draft_id
@@ -200,8 +200,8 @@ module Fastlane
         UI.important('Указаны и aab, и gms_apk — будет загружен только aab') if params[:aab] && params[:gms_apk]
       end
 
-      def self.upload_builds(helper, token, draft_id, params)
-        common = { token: token, draft_id: draft_id, package_name: params[:package_name] }
+      def self.upload_builds(helper, api, draft_id, params)
+        common = { api: api, draft_id: draft_id, package_name: params[:package_name] }
 
         if params[:aab]
           helper.upload_build(**common, file_path: params[:aab], build_type: 'aab')
@@ -214,14 +214,14 @@ module Fastlane
         helper.upload_build(**common, file_path: params[:hms_apk], build_type: 'apk', service_type: 'HMS')
       end
 
-      def self.finish(helper, token, draft_id, params)
+      def self.finish(helper, api, draft_id, params)
         unless params[:submit_for_moderation]
           UI.important("Черновик ##{draft_id} создан, но не отправлен на модерацию")
           return
         end
 
         helper.commit_draft(
-          token: token, draft_id: draft_id, package_name: params[:package_name],
+          api: api, draft_id: draft_id, package_name: params[:package_name],
           priority_update: params[:priority_update]
         )
       end

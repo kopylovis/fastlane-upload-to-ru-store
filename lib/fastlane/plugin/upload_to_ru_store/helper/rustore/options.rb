@@ -1,5 +1,6 @@
 require 'fastlane_core/configuration/config_item'
 require_relative 'api'
+require_relative 'client'
 
 module Fastlane
   module Helper
@@ -119,6 +120,24 @@ module Fastlane
             default_value: Client::READ_TIMEOUT,
             type: Integer
           )
+        end
+
+        def base_url
+          FastlaneCore::ConfigItem.new(
+            key: :base_url,
+            env_name: 'RUSTORE_BASE_URL',
+            description: "RuStore API host. The docs now name https://public-api-m.rustore.ru; #{Client::BASE_URL} still answers",
+            optional: true,
+            default_value: Client::BASE_URL,
+            type: String,
+            verify_block: proc do |value|
+              UI.user_error!("base_url должен начинаться с https://, получено #{value}") unless value.start_with?('https://')
+            end
+          )
+        end
+
+        def connection
+          [timeout, base_url]
         end
 
         def existing_file(key, env_name, description)

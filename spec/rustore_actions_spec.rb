@@ -2,11 +2,12 @@ require 'spec_helper'
 
 describe 'RuStore lifecycle actions' do
   let(:helper) { Fastlane::Helper::UploadToRuStoreHelper }
+  let(:api) { instance_double(Fastlane::Helper::Rustore::Api) }
   let(:fastlane_error) { FastlaneCore::Interface::FastlaneError }
   let(:auth) { { package_name: 'com.example.app', key_id: 'kid', private_key: 'pem' } }
 
   before do
-    allow(helper).to receive(:fetch_token).and_return('jwe')
+    allow(helper).to receive(:session).and_return(api)
   end
 
   describe Fastlane::Actions::RustoreVersionStatusAction do

@@ -35,7 +35,7 @@ module Fastlane
           Options.publish_type,
           Options.publish_datetime,
           Options.partial_value,
-          Options.timeout
+          *Options.connection
         ]
       end
 
@@ -59,7 +59,7 @@ module Fastlane
 
       def self.run(params)
         helper = Helper::UploadToRuStoreHelper
-        token = helper.fetch_token(key_id: params[:key_id], private_key: params[:private_key])
+        api = helper.session(params)
 
         settings = {
           publish_type: params[:publish_type],
@@ -69,7 +69,7 @@ module Fastlane
         UI.user_error!('Не передано ни одной настройки публикации') if settings.empty?
 
         helper.update_publish_settings(
-          token: token,
+          api: api,
           package_name: params[:package_name],
           version_id: params[:version_id],
           **settings

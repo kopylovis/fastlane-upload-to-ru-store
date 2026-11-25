@@ -29,7 +29,7 @@ module Fastlane
       end
 
       def self.available_options
-        Options.auth + [Options.version_id(optional: true), Options.timeout]
+        Options.auth + [Options.version_id(optional: true), *Options.connection]
       end
 
       def self.example_code
@@ -50,15 +50,15 @@ module Fastlane
 
       def self.run(params)
         helper = Helper::UploadToRuStoreHelper
-        token = helper.fetch_token(key_id: params[:key_id], private_key: params[:private_key])
-        version_id = params[:version_id] || resolve_latest(helper, token, params[:package_name])
+        api = helper.session(params)
+        version_id = params[:version_id] || resolve_latest(helper, api, params[:package_name])
 
-        helper.publish_version(token: token, package_name: params[:package_name], version_id: version_id)
+        helper.publish_version(api: api, package_name: params[:package_name], version_id: version_id)
         version_id
       end
 
-      def self.resolve_latest(helper, token, package_name)
-        version = helper.latest_version(token: token, package_name: package_name)
+      def self.resolve_latest(helper, api, package_name)
+        version = helper.latest_version(api: api, package_name: package_name)
         UI.user_error!("У #{package_name} нет ни одной версии") if version.nil?
         version['versionId']
       end
