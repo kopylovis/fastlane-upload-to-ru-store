@@ -12,18 +12,28 @@ describe 'RuStore lifecycle actions' do
 
   describe Fastlane::Actions::RustoreVersionStatusAction do
     it 'returns the latest version and fills the lane context' do
-      allow(helper).to receive(:latest_version).and_return(
-        { 'versionId' => 42, 'versionCode' => 7, 'versionName' => '1.0', 'versionStatus' => 'ACTIVE' }
+      allow(helper).to receive(:describe_version).and_return(
+        { 'versionId' => 42, 'versionCode' => 7, 'versionName' => '1.0', 'versionStatus' => 'REJECTED_BY_MODERATOR',
+          'statusComment' => 'Нет скриншотов' }
       )
 
       result = described_class.run(auth.merge(testing_type: 'ALL'))
 
       expect(result['versionId']).to eq(42)
-      expect(Fastlane::Actions.lane_context[Fastlane::Actions::SharedValues::RUSTORE_VERSION_STATUS]).to eq('ACTIVE')
+      expect(Fastlane::Actions.lane_context[Fastlane::Actions::SharedValues::RUSTORE_VERSION_STATUS]).to eq('REJECTED_BY_MODERATOR')
+      expect(Fastlane::Actions.lane_context[Fastlane::Actions::SharedValues::RUSTORE_VERSION_STATUS_COMMENT]).to eq('Нет скриншотов')
+    end
+
+    it 'reads a specific version when version_id is given' do
+      allow(helper).to receive(:describe_version).and_return({ 'versionId' => 8, 'versionStatus' => 'DRAFT' })
+
+      described_class.run(auth.merge(version_id: 8))
+
+      expect(helper).to have_received(:describe_version).with(hash_including(version_id: 8))
     end
 
     it 'returns nil when the application has no versions' do
-      allow(helper).to receive(:latest_version).and_return(nil)
+      allow(helper).to receive(:describe_version).and_return(nil)
       expect(described_class.run(auth)).to be_nil
     end
   end

@@ -151,9 +151,13 @@ RUSTORE_PRIVATE_KEY=$(tr -d '\n' < key.pem)
 
 ### rustore_version_status
 
-Возвращает Hash с данными последней версии: `versionId`, `versionCode`,
-`versionName`, `versionStatus`, `publishType`, `partialValue` и остальные поля RuStore.
-Если версий нет — возвращает `nil`.
+Возвращает Hash с данными версии: `versionId`, `versionCode`, `versionName`,
+`versionStatus`, `publishType`, `partialValue`, `statusComment` и остальные поля
+RuStore. По умолчанию берется последняя версия, `version_id` выбирает конкретную.
+Данные дополняются детальной карточкой из v2 API. В `statusComment` RuStore пишет
+комментарий модератора, например причину отказа. Плагин печатает его и кладет
+в `lane_context[SharedValues::RUSTORE_VERSION_STATUS_COMMENT]`. Если версий нет,
+возвращается `nil`.
 
 ```ruby
 version = rustore_version_status(
@@ -165,7 +169,7 @@ version = rustore_version_status(
 UI.message("Статус: #{version['versionStatus']}")
 ```
 
-Параметры: `package_name`, `key_id`, `private_key`, `testing_type` (`ALL`/`RELEASE`/`ALPHA`), `timeout`, `base_url`.
+Параметры: `package_name`, `key_id`, `private_key`, `version_id`, `testing_type` (`ALL`/`RELEASE`/`ALPHA`), `timeout`, `base_url`.
 
 Возможные значения `versionStatus`:
 
@@ -226,7 +230,9 @@ RuStore разрешает только увеличивать процент р
 ### rustore_archive_version
 
 Архивирует версию. RuStore принимает архивирование только для статусов
-`READY_FOR_PUBLICATION` и `REJECTED_BY_MODERATOR`.
+`READY_FOR_PUBLICATION` и `REJECTED_BY_MODERATOR`. Действие сначала читает статус
+версии и при другом статусе останавливается с понятной ошибкой. Если версия
+не была опубликована, ее `versionCode` после архивирования можно занять снова.
 
 ```ruby
 rustore_archive_version(

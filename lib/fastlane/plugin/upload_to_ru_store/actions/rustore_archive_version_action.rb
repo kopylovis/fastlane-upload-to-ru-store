@@ -20,7 +20,7 @@ module Fastlane
       def self.details
         <<~DETAILS
           RuStore only accepts archiving for versions in #{Api::ARCHIVABLE_STATUSES.join(' or ')}.
-          The action checks the current status first and fails early with a clear message
+          The action reads the version status first and fails early with a clear message
           instead of letting the API return an opaque error.
         DETAILS
       end
