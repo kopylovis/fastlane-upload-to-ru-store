@@ -5,6 +5,7 @@ require_relative 'signer'
 require_relative 'errors'
 require_relative 'publication'
 require_relative 'draft_fields'
+require_relative 'media'
 
 module Fastlane
   module Helper
@@ -195,6 +196,48 @@ module Fastlane
           end
 
           response.ensure_success!
+        end
+
+        def upload_icon(package_name, version_id, file_path)
+          client.post_file(
+            "/public/v1/application/#{package_name}/version/#{version_id}/image/icon",
+            file_path: file_path,
+            content_type: Media.icon!(file_path),
+            context: 'загрузка иконки'
+          ).ensure_success!
+        end
+
+        # v2 upload: any device type, and the response carries the screenshot id.
+        def upload_screenshot(package_name, version_id, file_path, orientation:, ordinal:, type: 'SCREENSHOT')
+          path = [
+            "/public/v2/application/#{package_name}/version/#{version_id}/image/screenshot",
+            Media.one_of!(orientation, Media::ORIENTATIONS, 'orientation'), Media.ordinal!(ordinal), Media.type!(type)
+          ].join('/')
+          client.post_file(path, file_path: file_path, content_type: Media.screenshot!(file_path), context: 'загрузка скриншота')
+                .ensure_success!.payload
+        end
+
+        def each_screenshot(package_name, version_id, &block)
+          return to_enum(:each_screenshot, package_name, version_id) unless block_given?
+
+          (0...MAX_PAGES).each do |page|
+            payload = client.get(
+              "/public/v2/application/#{package_name}/version/#{version_id}/image/screenshot",
+              params: { page: page, size: PAGE_SIZE },
+              context: 'список скриншотов'
+            ).ensure_success!.payload
+            payload = {} unless payload.is_a?(Hash)
+            content = payload['content'].to_a
+            content.each(&block)
+            break if last_page?(payload, page, content.size)
+          end
+        end
+
+        def delete_screenshot(package_name, version_id, screenshot_id)
+          client.delete(
+            "/public/v2/application/#{package_name}/version/#{version_id}/image/screenshot/#{screenshot_id}",
+            context: 'удаление скриншота'
+          ).ensure_success!
         end
 
         def commit(package_name, version_id, priority_update: nil)

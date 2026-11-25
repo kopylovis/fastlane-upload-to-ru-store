@@ -23,6 +23,7 @@ describe Fastlane::Actions::UploadToRuStoreAction do
     allow(helper).to receive(:create_draft).and_return(11)
     allow(helper).to receive(:upload_build)
     allow(helper).to receive(:commit_draft)
+    allow(helper).to receive(:upload_images)
     allow(helper).to receive(:latest_version).and_return({ 'versionId' => 11 })
   end
 
@@ -78,6 +79,20 @@ describe Fastlane::Actions::UploadToRuStoreAction do
 
     expect(helper).to have_received(:upload_build).with(hash_including(build_type: 'aab'))
     expect(helper).to have_received(:upload_build).with(hash_including(file_path: 'hms.apk', service_type: 'HMS'))
+  end
+
+  it 'uploads screenshots between the build and the moderation submit' do
+    described_class.run(base_params.merge(screenshots: ['1.png'], tv_screenshots: ['tv.png'], replace_screenshots: true))
+
+    expect(helper).to have_received(:upload_images).with(
+      hash_including(version_id: 11, screenshots: { 'SCREENSHOT' => ['1.png'], 'TV_SCREENSHOT' => ['tv.png'] }, replace: true)
+    )
+  end
+
+  it 'skips images when none are given' do
+    described_class.run(base_params)
+
+    expect(helper).not_to have_received(:upload_images)
   end
 
   it 'keeps existing drafts when asked to' do

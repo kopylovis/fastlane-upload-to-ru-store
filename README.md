@@ -23,6 +23,7 @@ Fastlane-плагин для публикации Android-приложений �
   - [rustore_applications](#rustore_applications)
   - [rustore_edit_draft](#rustore_edit_draft)
   - [rustore_delete_draft](#rustore_delete_draft)
+  - [rustore_upload_images](#rustore_upload_images)
 - [Рецепты](#рецепты)
 - [Переменные окружения](#переменные-окружения)
 - [Отладка](#отладка)
@@ -63,7 +64,8 @@ end
    (он живет 15 минут, плагин сам получает новый перед истечением и после ответа 401);
 2. удаление незавершённых черновиков приложения;
 3. создание черновика с метаданными и настройками публикации;
-4. загрузка сборки (AAB или основной APK, и опционально HMS APK);
+4. загрузка сборки (AAB или основной APK, и опционально HMS APK), затем иконки
+   и скриншотов, если они переданы;
 5. отправка черновика на модерацию.
 
 Шаги 2 и 5 отключаются флагами `remove_existing_drafts` и `submit_for_moderation`.
@@ -117,6 +119,30 @@ RUSTORE_PRIVATE_KEY=$(tr -d '\n' < key.pem)
 Основной APK уходит с `servicesType=Unknown` и `isMainApk=true`, HMS APK с
 `servicesType=HMS` и `isMainApk=false`. Других значений `servicesType` RuStore
 не принимает.
+
+#### Иконка и скриншоты
+
+| Параметр | Описание |
+|---|---|
+| `icon` | PNG или JPEG 512×512, до 3 МБ |
+| `screenshots` | Скриншоты телефона по порядку, до 10 файлов PNG или JPEG |
+| `tablet_screenshots` | Скриншоты планшета, до 10 |
+| `tv_screenshots` | Скриншоты ТВ, до 10 |
+| `screenshots_orientation` | `PORTRAIT` или `LANDSCAPE`. Без него ориентация берется из размера картинки |
+| `replace_screenshots` | По умолчанию `true`: перед загрузкой удаляются скриншоты того же типа, которые черновик унаследовал от активной версии |
+
+Стороны скриншота от 320 до 3840 px, файл до 5 МБ, соотношение 9:16 или 16:9.
+Ориентации смешивать нельзя. Для публикации нужно минимум 3 скриншота
+телефона. Плагин проверяет формат, размер файла и стороны до загрузки.
+Картинки загружаются после сборки и до отправки на модерацию.
+
+```ruby
+upload_to_ru_store(
+  ...,
+  icon: "metadata/rustore/icon.png",
+  screenshots: Dir["metadata/rustore/phone/*.png"].sort
+)
+```
 
 #### Публикация
 
@@ -318,6 +344,23 @@ rustore_delete_draft(
   key_id: ENV["RUSTORE_KEY_ID"],
   private_key: ENV["RUSTORE_PRIVATE_KEY"],
   version_id: 12345
+)
+```
+
+---
+
+### rustore_upload_images
+
+Загружает иконку и скриншоты в существующий черновик, без `version_id` в текущий.
+Параметры те же, что в разделе [Иконка и скриншоты](#иконка-и-скриншоты).
+Возвращает `versionId`.
+
+```ruby
+rustore_upload_images(
+  package_name: "com.example.app",
+  key_id: ENV["RUSTORE_KEY_ID"],
+  private_key: ENV["RUSTORE_PRIVATE_KEY"],
+  tv_screenshots: Dir["metadata/rustore/tv/*.png"].sort
 )
 ```
 
