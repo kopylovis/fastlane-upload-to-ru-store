@@ -61,8 +61,15 @@ describe Fastlane::Actions::UploadToRuStoreAction do
   it 'uploads GMS and HMS apks when no aab is given' do
     described_class.run(base_params.merge(aab: nil, gms_apk: 'gms.apk', hms_apk: 'hms.apk'))
 
-    expect(helper).to have_received(:upload_build).with(hash_including(service_type: 'GMS'))
-    expect(helper).to have_received(:upload_build).with(hash_including(service_type: 'HMS'))
+    expect(helper).to have_received(:upload_build).with(hash_including(file_path: 'gms.apk', service_type: 'Unknown'))
+    expect(helper).to have_received(:upload_build).with(hash_including(file_path: 'hms.apk', service_type: 'HMS'))
+  end
+
+  it 'uploads an HMS apk next to the aab' do
+    described_class.run(base_params.merge(hms_apk: 'hms.apk'))
+
+    expect(helper).to have_received(:upload_build).with(hash_including(build_type: 'aab'))
+    expect(helper).to have_received(:upload_build).with(hash_including(file_path: 'hms.apk', service_type: 'HMS'))
   end
 
   it 'keeps existing drafts when asked to' do

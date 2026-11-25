@@ -45,6 +45,11 @@ module Fastlane
           price_value: { key: :priceValue }
         }.freeze
 
+        SERVICES_UNKNOWN = 'Unknown'.freeze
+        SERVICES_HMS = 'HMS'.freeze
+        SERVICES_TYPES = [SERVICES_UNKNOWN, SERVICES_HMS].freeze
+        VERSION_CODE_TAKEN = ['must be larger', 'должен быть выше', 'different version code'].freeze
+
         MIME_TYPES = {
           'aab' => 'application/octet-stream',
           'apk' => 'application/vnd.android.package-archive'
@@ -122,21 +127,22 @@ module Fastlane
           client.delete("/public/v1/application/#{package_name}/version/#{version_id}", context: 'удаление черновика')
         end
 
+        # servicesType takes only HMS and Unknown. The main APK for all devices is
+        # Unknown, and an HMS APK can never be the main one.
         def upload_build(package_name, version_id, file_path:, build_type:, service_type: nil, main_apk: nil)
           validate_build!(file_path, build_type)
-
-          is_main = main_apk.nil? ? (service_type == 'GMS') : main_apk
+          context = "загрузка #{build_type}"
 
           response = client.post_file(
             "/public/v1/application/#{package_name}/version/#{version_id}/#{build_type}",
             file_path: file_path,
             content_type: MIME_TYPES.fetch(build_type),
-            params: { servicesType: service_type, isMainApk: (is_main if service_type) },
-            context: "загрузка #{build_type}"
+            params: build_type == 'apk' ? apk_params(service_type, main_apk) : {},
+            context: context
           )
 
-          if response.message.to_s.include?('must be larger')
-            raise ApiError.new('сборка с таким versionCode уже была загружена ранее', context: "загрузка #{build_type}")
+          if VERSION_CODE_TAKEN.any? { |text| response.message.to_s.include?(text) }
+            raise ApiError.new("versionCode этой сборки не больше уже загруженного: #{response.message}", context: context)
           end
 
           response.ensure_success!
@@ -234,6 +240,15 @@ module Fastlane
           return found.to_i if found
 
           raise ApiError.new("не удалось получить versionId: #{response.preview}", context: 'создание черновика')
+        end
+
+        def apk_params(service_type, main_apk)
+          services = service_type || SERVICES_UNKNOWN
+          validate_inclusion!(services, SERVICES_TYPES, 'service_type')
+          is_main = main_apk.nil? ? services == SERVICES_UNKNOWN : main_apk
+          raise ConfigurationError, 'HMS APK не может быть основным' if is_main && services == SERVICES_HMS
+
+          { servicesType: services, isMainApk: is_main }
         end
 
         def validate_build!(file_path, build_type)
