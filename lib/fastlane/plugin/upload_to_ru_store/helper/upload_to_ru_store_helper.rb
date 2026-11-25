@@ -18,33 +18,23 @@ module Fastlane
       CHANGELOG_LIMIT = Rustore::Api::LIMITS[:whats_new]
 
       class << self
-        def api(key_id: nil, private_key: nil, token: nil, timeout: nil)
-          instance = Rustore::Api.new(client: build_client(timeout))
-          if token
-            instance.client.token = token
-          elsif key_id && private_key
-            wrap { instance.authenticate(Rustore::Signer.new(key_id: key_id, private_key: private_key)) }
-          end
-          instance
+        # Authenticates once and returns an Api bound to its own client, so the
+        # timeout and base_url of the calling action apply to every request it makes.
+        def session(params)
+          api = Rustore::Api.new(client: build_client(timeout: params[:timeout], base_url: params[:base_url]))
+          wrap { api.authenticate(Rustore::Signer.new(key_id: params[:key_id], private_key: params[:private_key])) }
+          api
         end
 
-        def fetch_token(key_id:, private_key:)
+        def remove_drafts(api:, package_name:)
           wrap do
-            signer = Rustore::Signer.new(key_id: key_id, private_key: private_key)
-            Rustore::Api.new(client: shared_client).authenticate(signer)
-          end
-        end
-
-        def remove_drafts(token:, package_name:)
-          instance = with_token(token)
-          wrap do
-            drafts = instance.versions_with_status(package_name, Rustore::Api::STATUS_DRAFT)
+            drafts = api.versions_with_status(package_name, Rustore::Api::STATUS_DRAFT)
             UI.message("Черновиков к удалению: #{drafts.size}") unless drafts.empty?
             drafts.each do |draft|
               id = draft['versionId']
-              response = instance.delete_draft(package_name, id)
-              if response.success? || response.status == 204
-                UI.message("Удалён черновик ##{id}")
+              response = api.delete_draft(package_name, id)
+              if response.success?
+                UI.message("Удален черновик ##{id}")
               else
                 UI.important("Не удалось удалить черновик ##{id}: #{response.message || response.preview}")
               end
@@ -52,19 +42,17 @@ module Fastlane
           end
         end
 
-        def create_draft(token:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil, **attributes)
-          instance = with_token(token)
+        def create_draft(api:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil, **attributes)
           wrap do
             payload = attributes.merge(publish_type: publish_type, publish_datetime: publish_datetime)
             payload[:whats_new] = read_changelog(changelog_path) if changelog_path
-            instance.create_draft(package_name, payload)
+            api.create_draft(package_name, payload)
           end
         end
 
-        def upload_build(token:, draft_id:, file_path:, package_name:, build_type:, service_type: nil)
-          instance = with_token(token)
+        def upload_build(api:, draft_id:, file_path:, package_name:, build_type:, service_type: nil)
           wrap do
-            instance.upload_build(
+            api.upload_build(
               package_name, draft_id,
               file_path: file_path, build_type: build_type, service_type: service_type
             )
@@ -72,41 +60,36 @@ module Fastlane
           end
         end
 
-        def commit_draft(token:, draft_id:, package_name:, priority_update: nil)
-          instance = with_token(token)
+        def commit_draft(api:, draft_id:, package_name:, priority_update: nil)
           wrap do
-            instance.commit(package_name, draft_id, priority_update: priority_update)
+            api.commit(package_name, draft_id, priority_update: priority_update)
             UI.success("Черновик ##{draft_id} отправлен на модерацию")
           end
         end
 
-        def publish_version(token:, package_name:, version_id:)
-          instance = with_token(token)
+        def publish_version(api:, package_name:, version_id:)
           wrap do
-            instance.publish(package_name, version_id)
+            api.publish(package_name, version_id)
             UI.success("Версия ##{version_id} опубликована")
           end
         end
 
-        def archive_version(token:, package_name:, version_id:)
-          instance = with_token(token)
+        def archive_version(api:, package_name:, version_id:)
           wrap do
-            instance.archive(package_name, version_id)
+            api.archive(package_name, version_id)
             UI.success("Версия ##{version_id} архивирована")
           end
         end
 
-        def update_publish_settings(token:, package_name:, version_id:, **settings)
-          instance = with_token(token)
+        def update_publish_settings(api:, package_name:, version_id:, **settings)
           wrap do
-            instance.update_publish_settings(package_name, version_id, **settings)
+            api.update_publish_settings(package_name, version_id, **settings)
             UI.success("Настройки публикации версии ##{version_id} обновлены")
           end
         end
 
-        def latest_version(token:, package_name:, testing_type: 'ALL')
-          instance = with_token(token)
-          wrap { instance.latest_version(package_name, testing_type: testing_type) }
+        def latest_version(api:, package_name:, testing_type: 'ALL')
+          wrap { api.latest_version(package_name, testing_type: testing_type) }
         end
 
         def read_changelog(path)
@@ -120,30 +103,18 @@ module Fastlane
           text
         end
 
-        def reset!
-          @shared_client = nil
-        end
-
         def debug?
           !ENV['RUSTORE_DEBUG'].to_s.empty? || !ENV['DEBUG'].to_s.empty?
         end
 
-        private
-
-        def with_token(token)
-          shared_client.token = token
-          Rustore::Api.new(client: shared_client)
-        end
-
-        def shared_client
-          @shared_client ||= build_client(nil)
-        end
-
-        def build_client(timeout)
+        def build_client(timeout: nil, base_url: nil)
           options = { logger: (Logger.new($stderr, level: Logger::DEBUG) if debug?) }
           options[:timeout] = timeout if timeout
+          options[:base_url] = base_url unless base_url.to_s.empty?
           Rustore::Client.new(**options)
         end
+
+        private
 
         def wrap
           yield

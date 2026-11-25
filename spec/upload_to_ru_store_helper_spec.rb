@@ -6,43 +6,55 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
   let(:token) { 'jwe-token' }
   let(:key) { SpecHelper.rsa_key }
   let(:fastlane_error) { FastlaneCore::Interface::FastlaneError }
+  let(:api) do
+    Fastlane::Helper::Rustore::Api.new(client: Fastlane::Helper::Rustore::Client.new).tap { |a| a.client.token = token }
+  end
 
-  describe '.fetch_token' do
-    it 'returns the jwe from the response' do
+  def session(private_key: key.to_pem, **extra)
+    described_class.session({ key_id: 'kid', private_key: private_key }.merge(extra))
+  end
+
+  describe '.session' do
+    it 'authenticates and keeps the jwe on its client' do
       stub_request(:post, "#{base}/public/auth/")
         .to_return(SpecHelper.json(body: { jwe: token }))
 
-      result = described_class.fetch_token(key_id: 'kid', private_key: key.to_pem)
-      expect(result).to eq(token)
+      expect(session.client.token).to eq(token)
     end
 
     it 'accepts a bare Base64 PKCS#8 key' do
-      der = Base64.strict_encode64(key.private_to_der)
       stub_request(:post, "#{base}/public/auth/")
         .to_return(SpecHelper.json(body: { jwe: token }))
 
-      expect(described_class.fetch_token(key_id: 'kid', private_key: der)).to eq(token)
+      expect(session(private_key: Base64.strict_encode64(key.private_to_der)).client.token).to eq(token)
+    end
+
+    it 'applies the timeout and base_url of the action' do
+      stub_request(:post, 'https://public-api-m.rustore.ru/public/auth/')
+        .to_return(SpecHelper.json(body: { jwe: token }))
+
+      client = session(timeout: 42, base_url: 'https://public-api-m.rustore.ru').client
+
+      expect(client.timeout).to eq(42)
+      expect(client.base_url).to eq('https://public-api-m.rustore.ru')
     end
 
     it 'fails with a clear message when the key cannot be parsed' do
-      expect { described_class.fetch_token(key_id: 'kid', private_key: 'not-a-key') }
-        .to raise_error(fastlane_error, /private_key/)
+      expect { session(private_key: 'not-a-key') }.to raise_error(fastlane_error, /private_key/)
     end
 
     it 'fails when the API answers with an error status' do
       stub_request(:post, "#{base}/public/auth/")
         .to_return(SpecHelper.error(401, message: 'bad signature'))
 
-      expect { described_class.fetch_token(key_id: 'kid', private_key: key.to_pem) }
-        .to raise_error(fastlane_error, /HTTP 401.*bad signature/)
+      expect { session }.to raise_error(fastlane_error, /HTTP 401.*bad signature/)
     end
 
     it 'does not crash when the error body is not JSON' do
       stub_request(:post, "#{base}/public/auth/")
         .to_return(status: 502, body: '<html>Bad Gateway</html>', headers: { 'Content-Type' => 'text/html' })
 
-      expect { described_class.fetch_token(key_id: 'kid', private_key: key.to_pem) }
-        .to raise_error(fastlane_error, /HTTP 502/)
+      expect { session }.to raise_error(fastlane_error, /HTTP 502/)
     end
   end
 
@@ -53,7 +65,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
              .to_return(SpecHelper.json(body: 42))
 
       id = described_class.create_draft(
-        token: token, package_name: pkg,
+        api: api, package_name: pkg,
         publish_type: 'DELAYED', publish_datetime: '2026-06-01T12:00:00+03:00'
       )
 
@@ -62,12 +74,12 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
     end
 
     it 'refuses DELAYED without a datetime' do
-      expect { described_class.create_draft(token: token, package_name: pkg, publish_type: 'DELAYED') }
+      expect { described_class.create_draft(api: api, package_name: pkg, publish_type: 'DELAYED') }
         .to raise_error(fastlane_error, /publish_datetime/)
     end
 
     it 'rejects an unknown publish_type' do
-      expect { described_class.create_draft(token: token, package_name: pkg, publish_type: 'WHENEVER') }
+      expect { described_class.create_draft(api: api, package_name: pkg, publish_type: 'WHENEVER') }
         .to raise_error(fastlane_error, /publish_type/)
     end
 
@@ -75,7 +87,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
       stub_request(:post, "#{base}/public/v1/application/#{pkg}/version")
         .to_return(SpecHelper.json(message: 'Draft 777 already exists'))
 
-      expect(described_class.create_draft(token: token, package_name: pkg)).to eq(777)
+      expect(described_class.create_draft(api: api, package_name: pkg)).to eq(777)
     end
   end
 
@@ -92,7 +104,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
       del0 = stub_request(:delete, "#{base}/public/v1/application/#{pkg}/version/0").to_return(status: 204)
       del500 = stub_request(:delete, "#{base}/public/v1/application/#{pkg}/version/500").to_return(status: 204)
 
-      described_class.remove_drafts(token: token, package_name: pkg)
+      described_class.remove_drafts(api: api, package_name: pkg)
 
       expect(del0).to have_been_requested
       expect(del500).to have_been_requested
@@ -108,7 +120,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
     it 'fails when the file is missing' do
       expect do
         described_class.upload_build(
-          token: token, draft_id: 1, file_path: '/nope/missing.aab',
+          api: api, draft_id: 1, file_path: '/nope/missing.aab',
           package_name: pkg, build_type: 'aab'
         )
       end.to raise_error(fastlane_error, /не найден/)
@@ -120,7 +132,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
 
       expect do
         described_class.upload_build(
-          token: token, draft_id: 1, file_path: aab, package_name: pkg, build_type: 'aab'
+          api: api, draft_id: 1, file_path: aab, package_name: pkg, build_type: 'aab'
         )
       end.to raise_error(fastlane_error, /versionCode/)
     end
@@ -128,7 +140,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
     it 'rejects an unknown build type' do
       expect do
         described_class.upload_build(
-          token: token, draft_id: 1, file_path: aab, package_name: pkg, build_type: 'ipa'
+          api: api, draft_id: 1, file_path: aab, package_name: pkg, build_type: 'ipa'
         )
       end.to raise_error(fastlane_error, /тип сборки/)
     end
@@ -139,7 +151,7 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
       stub_request(:post, "#{base}/public/v1/application/#{pkg}/version/5/commit")
         .to_return(SpecHelper.error(409, message: 'nothing to publish'))
 
-      expect { described_class.commit_draft(token: token, draft_id: 5, package_name: pkg) }
+      expect { described_class.commit_draft(api: api, draft_id: 5, package_name: pkg) }
         .to raise_error(fastlane_error, /nothing to publish/)
     end
   end

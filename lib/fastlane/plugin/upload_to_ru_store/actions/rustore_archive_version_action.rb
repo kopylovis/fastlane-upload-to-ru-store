@@ -30,7 +30,7 @@ module Fastlane
       end
 
       def self.available_options
-        Options.auth + [Options.version_id(optional: false), Options.timeout]
+        Options.auth + [Options.version_id(optional: false), *Options.connection]
       end
 
       def self.example_code
@@ -52,10 +52,10 @@ module Fastlane
 
       def self.run(params)
         helper = Helper::UploadToRuStoreHelper
-        token = helper.fetch_token(key_id: params[:key_id], private_key: params[:private_key])
+        api = helper.session(params)
 
         helper.archive_version(
-          token: token,
+          api: api,
           package_name: params[:package_name],
           version_id: params[:version_id]
         )

@@ -28,9 +28,3 @@ module SpecHelper
     { status: status, body: body.to_json, headers: { 'Content-Type' => 'application/json' } }
   end
 end
-
-RSpec.configure do |config|
-  config.before do
-    Fastlane::Helper::UploadToRuStoreHelper.reset!
-  end
-end

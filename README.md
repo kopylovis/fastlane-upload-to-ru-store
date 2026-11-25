@@ -23,6 +23,7 @@ Fastlane-плагин для публикации Android-приложений �
 - [Рецепты](#рецепты)
 - [Переменные окружения](#переменные-окружения)
 - [Отладка](#отладка)
+- [Адрес API](#адрес-api)
 - [Ограничения RuStore](#ограничения-rustore)
 - [Обновление с 1.0.x](#обновление-с-10x)
 - [Разработка](#разработка)
@@ -139,6 +140,7 @@ RUSTORE_PRIVATE_KEY=$(tr -d '\n' < key.pem)
 | `remove_existing_drafts` | `true` | Удалять существующие черновики перед созданием нового |
 | `submit_for_moderation` | `true` | Отправлять черновик на модерацию |
 | `timeout` | `600` | Таймаут чтения ответа, секунды |
+| `base_url` | `https://public-api.rustore.ru` | Адрес RuStore API, см. [Адрес API](#адрес-api) |
 
 ---
 
@@ -158,7 +160,7 @@ version = rustore_version_status(
 UI.message("Статус: #{version['versionStatus']}")
 ```
 
-Параметры: `package_name`, `key_id`, `private_key`, `testing_type` (`ALL`/`RELEASE`/`ALPHA`), `timeout`.
+Параметры: `package_name`, `key_id`, `private_key`, `testing_type` (`ALL`/`RELEASE`/`ALPHA`), `timeout`, `base_url`.
 
 Возможные значения `versionStatus`:
 
@@ -345,6 +347,7 @@ upload_to_ru_store(
 | `RUSTORE_VERSION_ID` | `version_id` |
 | `RUSTORE_TESTING_TYPE` | `testing_type` |
 | `RUSTORE_TIMEOUT` | `timeout` |
+| `RUSTORE_BASE_URL` | `base_url` |
 
 `key_id` и `private_key` помечены как `sensitive`, поэтому fastlane не печатает
 их в сводке параметров.
@@ -368,6 +371,22 @@ RUSTORE_DEBUG=1 bundle exec fastlane publish_to_rustore
 После таймаута чтения или ответа 5xx такой запрос не повторяется, потому что
 RuStore мог его уже выполнить. Файл сборки при повторе отправляется заново
 целиком.
+
+---
+
+## Адрес API
+
+Документация RuStore теперь называет хостом `https://public-api-m.rustore.ru`.
+Плагин по умолчанию ходит на `https://public-api.rustore.ru`. Этот адрес
+отвечает и из-за границы, а новый на 2026-11-25 не ответил на запрос из
+зарубежной сети. Если раннер CI стоит в России, новый адрес включается так:
+
+```ruby
+upload_to_ru_store(..., base_url: "https://public-api-m.rustore.ru")
+```
+
+или переменной `RUSTORE_BASE_URL`. Параметры `timeout` и `base_url` есть
+у всех действий.
 
 ---
 

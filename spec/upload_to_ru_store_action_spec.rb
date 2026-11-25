@@ -2,6 +2,7 @@ require 'spec_helper'
 
 describe Fastlane::Actions::UploadToRuStoreAction do
   let(:helper) { Fastlane::Helper::UploadToRuStoreHelper }
+  let(:api) { instance_double(Fastlane::Helper::Rustore::Api) }
   let(:fastlane_error) { FastlaneCore::Interface::FastlaneError }
   let(:aab) { File.join(Dir.tmpdir, 'spec-release.aab') }
   let(:base_params) do
@@ -17,7 +18,7 @@ describe Fastlane::Actions::UploadToRuStoreAction do
 
   before do
     File.write(aab, 'binary')
-    allow(helper).to receive(:fetch_token).and_return('jwe')
+    allow(helper).to receive(:session).and_return(api)
     allow(helper).to receive(:remove_drafts)
     allow(helper).to receive(:create_draft).and_return(11)
     allow(helper).to receive(:upload_build)
