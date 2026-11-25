@@ -49,62 +49,7 @@ module Fastlane
           Options.existing_file(:hms_apk, 'RUSTORE_HMS_APK', 'Path to the HMS APK'),
           Options.existing_file(:changelog_path, 'RUSTORE_CHANGELOG_PATH',
                                 "Path to a changelog file, up to #{Api::LIMITS[:whats_new]} characters"),
-          FastlaneCore::ConfigItem.new(
-            key: :whats_new,
-            env_name: 'RUSTORE_WHATS_NEW',
-            description: 'Release notes given inline, an alternative to changelog_path',
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :app_name,
-            env_name: 'RUSTORE_APP_NAME',
-            description: "Application name, up to #{Api::LIMITS[:app_name]} characters",
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :app_type,
-            env_name: 'RUSTORE_APP_TYPE',
-            description: "Application type: #{Api::APP_TYPES.join('/')}",
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :age_legal,
-            env_name: 'RUSTORE_AGE_LEGAL',
-            description: "Age rating: #{Api::AGE_LEGAL.join('/')}",
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :short_description,
-            env_name: 'RUSTORE_SHORT_DESCRIPTION',
-            description: "Short description, up to #{Api::LIMITS[:short_description]} characters",
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :full_description,
-            env_name: 'RUSTORE_FULL_DESCRIPTION',
-            description: "Full description, up to #{Api::LIMITS[:full_description]} characters",
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :moder_info,
-            env_name: 'RUSTORE_MODER_INFO',
-            description: "Note for the moderator, up to #{Api::LIMITS[:moder_info]} characters",
-            optional: true,
-            type: String
-          ),
-          FastlaneCore::ConfigItem.new(
-            key: :price_value,
-            env_name: 'RUSTORE_PRICE_VALUE',
-            description: 'Price in kopecks for paid applications',
-            optional: true,
-            type: Integer
-          ),
+          *Options.metadata,
           FastlaneCore::ConfigItem.new(
             key: :remove_existing_drafts,
             env_name: 'RUSTORE_REMOVE_EXISTING_DRAFTS',
@@ -222,17 +167,7 @@ module Fastlane
       end
 
       def self.draft_attributes(params)
-        {
-          whats_new: params[:whats_new],
-          partial_value: params[:partial_value],
-          app_name: params[:app_name],
-          app_type: params[:app_type],
-          age_legal: params[:age_legal],
-          short_description: params[:short_description],
-          full_description: params[:full_description],
-          moder_info: params[:moder_info],
-          price_value: params[:price_value]
-        }.compact
+        (Options::METADATA_KEYS + [:partial_value]).to_h { |key| [key, params[key]] }.compact
       end
 
       def self.output

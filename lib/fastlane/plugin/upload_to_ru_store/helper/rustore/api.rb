@@ -4,6 +4,7 @@ require_relative 'client'
 require_relative 'signer'
 require_relative 'errors'
 require_relative 'publication'
+require_relative 'draft_fields'
 
 module Fastlane
   module Helper
@@ -16,8 +17,8 @@ module Fastlane
 
         PUBLISH_TYPES = Publication::PUBLISH_TYPES
         PARTIAL_VALUES = Publication::PARTIAL_VALUES
-        AGE_LEGAL = %w[0+ 6+ 12+ 16+ 18+].freeze
-        APP_TYPES = %w[MAIN GAMES].freeze
+        AGE_LEGAL = DraftFields::AGE_LEGAL
+        APP_TYPES = DraftFields::APP_TYPES
         TESTING_TYPES = %w[ALL RELEASE ALPHA].freeze
         BUILD_TYPES = %w[apk aab].freeze
 
@@ -34,17 +35,6 @@ module Fastlane
           full_description: 4000,
           whats_new: 5000,
           moder_info: 180
-        }.freeze
-
-        DRAFT_FIELDS = {
-          app_name: { key: :appName, limit: :app_name },
-          app_type: { key: :appType, allowed: APP_TYPES },
-          age_legal: { key: :ageLegal, allowed: AGE_LEGAL },
-          short_description: { key: :shortDescription, limit: :short_description },
-          full_description: { key: :fullDescription, limit: :full_description },
-          whats_new: { key: :whatsNew, limit: :whats_new },
-          moder_info: { key: :moderInfo, limit: :moder_info },
-          price_value: { key: :priceValue, positive: true }
         }.freeze
 
         SERVICES_UNKNOWN = 'Unknown'.freeze
@@ -240,16 +230,7 @@ module Fastlane
         end
 
         def build_draft_payload(attributes)
-          payload = publication_payload(attributes)
-
-          DRAFT_FIELDS.each do |name, spec|
-            value = attributes[name]
-            next if value.nil?
-
-            payload[spec[:key]] = cast_field(value, spec, name)
-          end
-
-          payload
+          publication_payload(attributes).merge(DraftFields.payload(attributes))
         end
 
         def publication_payload(attributes)
@@ -258,14 +239,6 @@ module Fastlane
             publish_datetime: attributes[:publish_datetime],
             partial_value: attributes[:partial_value]
           )
-        end
-
-        def cast_field(value, spec, name)
-          return validate_inclusion!(value, spec[:allowed], name.to_s) if spec[:allowed]
-          return positive!(value, name) if spec[:positive]
-          return truncate!(value, spec[:limit]) if spec[:limit]
-
-          value
         end
 
         def extract_version_id(response)
@@ -294,25 +267,10 @@ module Fastlane
           raise ConfigurationError, "файл сборки не найден: #{file_path}" unless File.file?(file_path)
         end
 
-        def positive!(value, name)
-          number = Integer(value, exception: false)
-          raise ConfigurationError, "#{name} должен быть целым числом больше 0, получено #{value}" unless number&.positive?
-
-          number
-        end
-
         def validate_inclusion!(value, allowed, name)
           raise ConfigurationError, "неизвестный #{name}: #{value}. Допустимы: #{allowed.join(', ')}" unless allowed.include?(value)
 
           value
-        end
-
-        def truncate!(value, limit_key)
-          limit = LIMITS.fetch(limit_key)
-          text = value.to_s
-          raise ConfigurationError, "#{limit_key} длиннее #{limit} символов (сейчас #{text.length})" if text.length > limit
-
-          text
         end
       end
     end
