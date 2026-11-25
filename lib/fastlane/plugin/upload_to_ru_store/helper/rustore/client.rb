@@ -32,8 +32,16 @@ module Fastlane
           @token = nil
         end
 
-        attr_accessor :token
-        attr_reader :base_url, :timeout
+        # A token is refreshed this many seconds before RuStore says it expires.
+        TOKEN_REFRESH_MARGIN = 60
+
+        attr_accessor :token, :authenticator
+        attr_reader :base_url, :timeout, :token_expires_at
+
+        def assign_token(value, ttl: nil)
+          @token = value
+          @token_expires_at = ttl ? Time.now + ttl.to_i : nil
+        end
 
         def get(path, params: {}, context: nil)
           request(:get, path, params: params, context: context)
@@ -55,7 +63,33 @@ module Fastlane
 
         private
 
+        # The JWE lives 900 seconds, and a release with a large AAB and an HMS APK can
+        # take longer. The token is renewed ahead of expiry, and once more on a 401.
         def request(method, path, body: nil, params: {}, context: nil, file: nil)
+          refresh_token! if token_expiring?
+          response = send_with_retries(method, path, body, params, context, file)
+          return response unless response.status == 401 && can_refresh?
+
+          refresh_token!
+          send_with_retries(method, path, body, params, context, file)
+        end
+
+        def can_refresh?
+          !@authenticator.nil? && !@refreshing
+        end
+
+        def token_expiring?
+          can_refresh? && !@token_expires_at.nil? && Time.now >= @token_expires_at - TOKEN_REFRESH_MARGIN
+        end
+
+        def refresh_token!
+          @refreshing = true
+          @authenticator.call
+        ensure
+          @refreshing = false
+        end
+
+        def send_with_retries(method, path, body, params, context, file)
           attempt = 0
           loop do
             attempt += 1
