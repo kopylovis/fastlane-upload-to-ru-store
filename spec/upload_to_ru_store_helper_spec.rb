@@ -184,6 +184,50 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
     end
   end
 
+  describe '.archive_version' do
+    let(:detail_url) { "#{base}/public/v2/application/#{pkg}/version/5" }
+
+    it 'refuses a version whose status RuStore will not archive' do
+      stub_request(:get, detail_url).to_return(SpecHelper.json(body: { versionId: 5, versionStatus: 'ACTIVE' }))
+
+      expect { described_class.archive_version(api: api, package_name: pkg, version_id: 5) }
+        .to raise_error(fastlane_error, /ACTIVE архивировать нельзя/)
+    end
+
+    it 'archives a rejected version' do
+      stub_request(:get, detail_url).to_return(SpecHelper.json(body: { versionId: 5, versionStatus: 'REJECTED_BY_MODERATOR' }))
+      archive = stub_request(:post, "#{detail_url.sub('/v2/', '/v1/')}/archive").to_return(SpecHelper.json(code: 'OK'))
+
+      described_class.archive_version(api: api, package_name: pkg, version_id: 5)
+
+      expect(archive).to have_been_requested
+    end
+  end
+
+  describe '.describe_version' do
+    let(:list_url) { "#{base}/public/v1/application/#{pkg}/version" }
+
+    before do
+      record = { versionId: 9, versionCode: 3, versionStatus: 'REJECTED_BY_MODERATOR' }
+      stub_request(:get, list_url).with(query: hash_including({})).to_return(SpecHelper.json(body: { content: [record] }))
+    end
+
+    it 'adds the moderator comment from the v2 detail' do
+      stub_request(:get, "#{base}/public/v2/application/#{pkg}/version/9")
+        .to_return(SpecHelper.json(body: { versionId: 9, statusComment: 'Нет иконки' }))
+
+      version = described_class.describe_version(api: api, package_name: pkg)
+
+      expect(version).to include('versionCode' => 3, 'statusComment' => 'Нет иконки')
+    end
+
+    it 'falls back to the list record when the detail fails' do
+      stub_request(:get, "#{base}/public/v2/application/#{pkg}/version/9").to_return(SpecHelper.error(404, message: 'nope'))
+
+      expect(described_class.describe_version(api: api, package_name: pkg)).to include('versionId' => 9)
+    end
+  end
+
   describe '.commit_draft' do
     it 'raises when the API rejects the commit' do
       stub_request(:post, "#{base}/public/v1/application/#{pkg}/version/5/commit")

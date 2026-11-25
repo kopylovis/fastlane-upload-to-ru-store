@@ -83,6 +83,13 @@ module Fastlane
 
         def archive_version(api:, package_name:, version_id:)
           wrap do
+            status = api.version_detail(package_name, version_id).to_h['versionStatus']
+            allowed = Rustore::Api::ARCHIVABLE_STATUSES
+            if status && !allowed.include?(status)
+              raise Rustore::ConfigurationError,
+                    "версию ##{version_id} в статусе #{status} архивировать нельзя, RuStore принимает только #{allowed.join(' и ')}"
+            end
+
             api.archive(package_name, version_id)
             UI.success("Версия ##{version_id} архивирована")
           end
@@ -97,6 +104,25 @@ module Fastlane
 
         def latest_version(api:, package_name:, testing_type: 'ALL')
           wrap { api.latest_version(package_name, testing_type: testing_type) }
+        end
+
+        def version_detail(api:, package_name:, version_id:)
+          wrap { api.version_detail(package_name, version_id) }
+        end
+
+        # The list record of the latest version, completed with the v2 detail when
+        # RuStore returns it. The detail carries statusComment, the moderator's note.
+        def describe_version(api:, package_name:, version_id: nil, testing_type: 'ALL')
+          return version_detail(api: api, package_name: package_name, version_id: version_id) if version_id
+
+          record = latest_version(api: api, package_name: package_name, testing_type: testing_type)
+          return nil if record.nil?
+
+          detail = api.version_detail(package_name, record['versionId'])
+          detail.is_a?(Hash) ? record.merge(detail) : record
+        rescue Rustore::ApiError => e
+          UI.verbose("Детали версии недоступны: #{e}")
+          record
         end
 
         def read_changelog(path)

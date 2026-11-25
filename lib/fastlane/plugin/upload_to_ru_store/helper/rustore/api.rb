@@ -113,6 +113,15 @@ module Fastlane
           each_version(package_name, testing_type: testing_type).max_by { |v| v['versionCode'].to_i }
         end
 
+        # Detailed record of one version from the v2 API: everything the list
+        # returns plus statusComment (the moderator's reason), packages and files.
+        def version_detail(package_name, version_id)
+          client.get(
+            "/public/v2/application/#{package_name}/version/#{version_id}",
+            context: 'получение версии'
+          ).ensure_success!.payload
+        end
+
         # submit_now tells that the draft goes to moderation right away, so the
         # 24 hours to 60 days window of a DELAYED date can be checked up front.
         def create_draft(package_name, submit_now: false, **attributes)
