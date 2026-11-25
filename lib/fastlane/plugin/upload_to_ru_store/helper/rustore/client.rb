@@ -3,6 +3,8 @@ require 'faraday/multipart'
 require 'faraday/follow_redirects'
 require 'json'
 require 'logger'
+require 'net/http'
+require 'socket'
 require_relative 'errors'
 
 module Fastlane
@@ -13,8 +15,14 @@ module Fastlane
         READ_TIMEOUT = 600
         OPEN_TIMEOUT = 30
         RETRIABLE_STATUSES = [429, 500, 502, 503, 504].freeze
+        IDEMPOTENT_METHODS = %i[get delete].freeze
         MAX_RETRIES = 3
         RETRY_BACKOFF = 2
+
+        # Failures that happen before the request reaches RuStore. Repeating them
+        # is safe even for POST, because the server has not seen the request yet.
+        NOT_SENT_ERRORS = [Net::OpenTimeout, Errno::ECONNREFUSED, Errno::EHOSTUNREACH,
+                           Errno::ENETUNREACH, SocketError].freeze
 
         def initialize(base_url: BASE_URL, timeout: READ_TIMEOUT, open_timeout: OPEN_TIMEOUT, logger: nil)
           @base_url = base_url
@@ -25,6 +33,7 @@ module Fastlane
         end
 
         attr_accessor :token
+        attr_reader :base_url, :timeout
 
         def get(path, params: {}, context: nil)
           request(:get, path, params: params, context: context)
@@ -38,30 +47,60 @@ module Fastlane
           request(:delete, path, params: params, context: context)
         end
 
-        def post_file(path, file_part:, params: {}, context: nil)
-          request(:post, path, body: { file: file_part }, params: params, context: context)
+        # The multipart body is rebuilt for every attempt: a file part that was
+        # already sent is read to the end, and resending it would upload nothing.
+        def post_file(path, file_path:, content_type:, params: {}, context: nil)
+          request(:post, path, params: params, context: context, file: [file_path, content_type])
         end
 
         private
 
-        def request(method, path, body: nil, params: {}, context: nil)
+        def request(method, path, body: nil, params: {}, context: nil, file: nil)
           attempt = 0
-          begin
+          loop do
             attempt += 1
-            Response.new(perform(method, path, body, params), context)
-          rescue Faraday::TimeoutError, Faraday::ConnectionFailed => e
-            retry if retriable?(attempt) && sleep_backoff(attempt)
-
-            raise ApiError.new("сеть недоступна: #{e.message}", context: context)
+            response = attempt_request(method, path, body, params, file, context, attempt)
+            return response if response
           end
         end
 
-        def perform(method, path, body, params)
-          connection.public_send(method, path) do |req|
-            req.headers['Public-Token'] = token if token
-            params.each { |k, v| req.params[k.to_s] = v unless v.nil? }
-            req.body = body unless body.nil?
-          end
+        def attempt_request(method, path, body, params, file, context, attempt)
+          response = Response.new(perform(method, path, body, params, file), context)
+          return response unless retry_status?(method, response.status) && retriable?(attempt)
+
+          sleep_backoff(attempt)
+          nil
+        rescue Faraday::TimeoutError, Faraday::ConnectionFailed => e
+          raise ApiError.new("сеть недоступна: #{e.message}", context: context) unless retry_error?(method, e) && retriable?(attempt)
+
+          sleep_backoff(attempt)
+          nil
+        end
+
+        def perform(method, path, body, params, file)
+          part = Faraday::Multipart::FilePart.new(*file) if file
+          payload = part ? { file: part } : body
+          connection.public_send(method, path) { |req| fill(req, payload, params) }
+        ensure
+          part&.close
+        end
+
+        def fill(req, payload, params)
+          req.headers['Public-Token'] = token if token
+          params.each { |k, v| req.params[k.to_s] = v unless v.nil? }
+          req.body = payload unless payload.nil?
+        end
+
+        def retry_status?(method, status)
+          return true if status == 429
+
+          IDEMPOTENT_METHODS.include?(method) && RETRIABLE_STATUSES.include?(status)
+        end
+
+        def retry_error?(method, error)
+          return true if IDEMPOTENT_METHODS.include?(method)
+
+          NOT_SENT_ERRORS.any? { |klass| error.wrapped_exception.is_a?(klass) }
         end
 
         def retriable?(attempt)
@@ -70,7 +109,6 @@ module Fastlane
 
         def sleep_backoff(attempt)
           sleep(RETRY_BACKOFF**attempt)
-          true
         end
 
         def connection
@@ -78,7 +116,7 @@ module Fastlane
             f.request(:multipart)
             f.request(:json)
             f.response(:follow_redirects)
-            f.response(:json, content_type: /\bjson$/)
+            f.response(:json, content_type: /\bjson/)
             configure_logger(f)
             f.adapter(:net_http)
             f.options.timeout = @timeout

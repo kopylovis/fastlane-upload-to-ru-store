@@ -119,12 +119,12 @@ module Fastlane
         def upload_build(package_name, version_id, file_path:, build_type:, service_type: nil, main_apk: nil)
           validate_build!(file_path, build_type)
 
-          part = Faraday::Multipart::FilePart.new(file_path, MIME_TYPES.fetch(build_type))
           is_main = main_apk.nil? ? (service_type == 'GMS') : main_apk
 
           response = client.post_file(
             "/public/v1/application/#{package_name}/version/#{version_id}/#{build_type}",
-            file_part: part,
+            file_path: file_path,
+            content_type: MIME_TYPES.fetch(build_type),
             params: { servicesType: service_type, isMainApk: (is_main if service_type) },
             context: "загрузка #{build_type}"
           )
