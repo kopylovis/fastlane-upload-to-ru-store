@@ -10,6 +10,14 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
     Fastlane::Helper::Rustore::Api.new(client: Fastlane::Helper::Rustore::Client.new).tap { |a| a.client.token = token }
   end
 
+  def with_warnings_off
+    verbose = $VERBOSE
+    $VERBOSE = nil
+    yield
+  ensure
+    $VERBOSE = verbose
+  end
+
   def session(private_key: key.to_pem, **extra)
     described_class.session({ key_id: 'kid', private_key: private_key }.merge(extra))
   end
@@ -88,6 +96,36 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
         .to_return(SpecHelper.json(message: 'Draft 777 already exists'))
 
       expect(described_class.create_draft(api: api, package_name: pkg)).to eq(777)
+    end
+  end
+
+  describe '.read_changelog' do
+    let(:path) { File.join(Dir.tmpdir, 'changelog-spec.txt') }
+
+    after { FileUtils.rm_f(path) }
+
+    it 'reads Cyrillic as UTF-8 even when the locale is ASCII' do
+      File.binwrite(path, "\xEF\xBB\xBFИсправлены ошибки".b + 'Исправлены ошибки'.b)
+      previous = Encoding.default_external
+      with_warnings_off { Encoding.default_external = Encoding::US_ASCII }
+
+      text = described_class.read_changelog(path)
+
+      expect(text.encoding).to eq(Encoding::UTF_8)
+      expect(text).to eq('Исправлены ошибкиИсправлены ошибки')
+      expect { text.to_json }.not_to raise_error
+    ensure
+      with_warnings_off { Encoding.default_external = previous }
+    end
+
+    it 'counts the limit in characters, not bytes' do
+      File.write(path, 'я' * 5000, encoding: 'utf-8')
+      expect(described_class.read_changelog(path).length).to eq(5000)
+    end
+
+    it 'refuses a file that is not UTF-8' do
+      File.binwrite(path, "\xCF\xF0\xE8".b)
+      expect { described_class.read_changelog(path) }.to raise_error(Fastlane::Helper::Rustore::ConfigurationError, /UTF-8/)
     end
   end
 

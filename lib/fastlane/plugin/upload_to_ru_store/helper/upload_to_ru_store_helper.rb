@@ -45,7 +45,10 @@ module Fastlane
         def create_draft(api:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil, **attributes)
           wrap do
             payload = attributes.merge(publish_type: publish_type, publish_datetime: publish_datetime)
-            payload[:whats_new] = read_changelog(changelog_path) if changelog_path
+            if changelog_path
+              UI.important('Указаны и changelog_path, и whats_new. Будет использован файл') if attributes[:whats_new]
+              payload[:whats_new] = read_changelog(changelog_path)
+            end
             api.create_draft(package_name, payload)
           end
         end
@@ -95,7 +98,11 @@ module Fastlane
         def read_changelog(path)
           raise Rustore::ConfigurationError, "файл changelog не найден: #{path}" unless File.file?(path)
 
-          text = File.read(path)
+          # Read as UTF-8 whatever the locale is: with LANG=C, as on many CI images,
+          # Ruby would read Cyrillic as US-ASCII and JSON encoding would fail.
+          text = File.read(path, encoding: 'bom|utf-8')
+          raise Rustore::ConfigurationError, "changelog не в кодировке UTF-8: #{path}" unless text.valid_encoding?
+
           if text.length > CHANGELOG_LIMIT
             raise Rustore::ConfigurationError,
                   "changelog длиннее #{CHANGELOG_LIMIT} символов (сейчас #{text.length})"
