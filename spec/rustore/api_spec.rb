@@ -119,6 +119,54 @@ describe Fastlane::Helper::Rustore::Api do
     end
   end
 
+  describe '#upload_build' do
+    let(:apk) { File.join(Dir.tmpdir, 'api-spec.apk') }
+    let(:apk_url) { "#{base}/public/v1/application/#{pkg}/version/5/apk" }
+
+    before { File.write(apk, 'binary') }
+    after { FileUtils.rm_f(apk) }
+
+    it 'marks the main APK as Unknown services and main' do
+      stub = stub_request(:post, apk_url).with(query: { servicesType: 'Unknown', isMainApk: 'true' })
+                                         .to_return(SpecHelper.json(code: 'OK'))
+
+      api.upload_build(pkg, 5, file_path: apk, build_type: 'apk')
+
+      expect(stub).to have_been_requested
+    end
+
+    it 'never marks an HMS APK as main' do
+      stub = stub_request(:post, apk_url).with(query: { servicesType: 'HMS', isMainApk: 'false' })
+                                         .to_return(SpecHelper.json(code: 'OK'))
+
+      api.upload_build(pkg, 5, file_path: apk, build_type: 'apk', service_type: 'HMS')
+
+      expect(stub).to have_been_requested
+    end
+
+    it 'refuses a services type RuStore does not know' do
+      expect { api.upload_build(pkg, 5, file_path: apk, build_type: 'apk', service_type: 'GMS') }
+        .to raise_error(config_error, /service_type/)
+    end
+
+    it 'sends no query parameters with an AAB' do
+      stub = stub_request(:post, "#{base}/public/v1/application/#{pkg}/version/5/aab")
+             .with { |request| request.uri.query.nil? }
+             .to_return(SpecHelper.json(code: 'OK'))
+
+      api.upload_build(pkg, 5, file_path: apk, build_type: 'aab')
+
+      expect(stub).to have_been_requested
+    end
+
+    it 'explains a versionCode clash reported in Russian' do
+      stub_request(:post, apk_url).with(query: hash_including({}))
+                                  .to_return(SpecHelper.error(400, message: 'Код версии должен быть выше, чем загруженный ранее'))
+
+      expect { api.upload_build(pkg, 5, file_path: apk, build_type: 'apk') }.to raise_error(api_error, /versionCode/)
+    end
+  end
+
   describe '#publish' do
     it 'calls the manual publication endpoint' do
       stub = stub_request(:post, "#{base}/public/v1/application/#{pkg}/version/5/publish")

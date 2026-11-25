@@ -60,7 +60,7 @@ end
    (он живет 15 минут, плагин сам получает новый перед истечением и после ответа 401);
 2. удаление незавершённых черновиков приложения;
 3. создание черновика с метаданными и настройками публикации;
-4. загрузка сборки (AAB, либо GMS APK и опционально HMS APK);
+4. загрузка сборки (AAB или основной APK, и опционально HMS APK);
 5. отправка черновика на модерацию.
 
 Шаги 2 и 5 отключаются флагами `remove_existing_drafts` и `submit_for_moderation`.
@@ -107,9 +107,13 @@ RUSTORE_PRIVATE_KEY=$(tr -d '\n' < key.pem)
 
 | Параметр | Описание |
 |---|---|
-| `aab` | Путь к Android App Bundle. Если указан, APK не загружаются |
-| `gms_apk` | Путь к APK с Google Mobile Services |
-| `hms_apk` | Путь к APK с Huawei Mobile Services, грузится дополнительно |
+| `aab` | Путь к Android App Bundle. Если указан, `gms_apk` не загружается |
+| `gms_apk` | Путь к основному APK для всех устройств |
+| `hms_apk` | Путь к APK с Huawei Mobile Services, грузится дополнительно к `aab` или `gms_apk` |
+
+Основной APK уходит с `servicesType=Unknown` и `isMainApk=true`, HMS APK с
+`servicesType=HMS` и `isMainApk=false`. Других значений `servicesType` RuStore
+не принимает.
 
 #### Публикация
 

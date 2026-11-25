@@ -20,7 +20,7 @@ module Fastlane
       def self.details
         <<~DETAILS
           Creates a draft version in RuStore, fills in the metadata you pass, uploads the
-          build (AAB, or GMS and HMS APKs) and submits the draft for moderation.
+          build (an AAB or a main APK, plus an optional HMS APK) and submits the draft for moderation.
 
           Existing drafts of the package are removed first, so a rerun after a failed
           attempt does not pile them up. Set remove_existing_drafts to false to keep them.
@@ -197,7 +197,7 @@ module Fastlane
 
       def self.validate_sources!(params)
         UI.user_error!('Необходимо указать aab или gms_apk') if params[:aab].nil? && params[:gms_apk].nil?
-        UI.important('Указаны и aab, и gms_apk — будет загружен только aab') if params[:aab] && params[:gms_apk]
+        UI.important('Указаны и aab, и gms_apk. Загружен будет только aab') if params[:aab] && params[:gms_apk]
       end
 
       def self.upload_builds(helper, api, draft_id, params)
@@ -206,12 +206,12 @@ module Fastlane
         if params[:aab]
           helper.upload_build(**common, file_path: params[:aab], build_type: 'aab')
         else
-          helper.upload_build(**common, file_path: params[:gms_apk], build_type: 'apk', service_type: 'GMS')
+          helper.upload_build(**common, file_path: params[:gms_apk], build_type: 'apk', service_type: Api::SERVICES_UNKNOWN)
         end
 
         return unless params[:hms_apk]
 
-        helper.upload_build(**common, file_path: params[:hms_apk], build_type: 'apk', service_type: 'HMS')
+        helper.upload_build(**common, file_path: params[:hms_apk], build_type: 'apk', service_type: Api::SERVICES_HMS)
       end
 
       def self.finish(helper, api, draft_id, params)
