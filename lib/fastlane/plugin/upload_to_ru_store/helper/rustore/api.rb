@@ -3,6 +3,7 @@ require 'faraday/multipart'
 require_relative 'client'
 require_relative 'signer'
 require_relative 'errors'
+require_relative 'publication'
 
 module Fastlane
   module Helper
@@ -12,8 +13,8 @@ module Fastlane
         TOKEN_TTL = 900
         MAX_PAGES = 50
 
-        PUBLISH_TYPES = %w[MANUAL INSTANTLY DELAYED].freeze
-        PARTIAL_VALUES = [5, 10, 25, 50, 75, 100].freeze
+        PUBLISH_TYPES = Publication::PUBLISH_TYPES
+        PARTIAL_VALUES = Publication::PARTIAL_VALUES
         AGE_LEGAL = %w[0+ 6+ 12+ 16+ 18+].freeze
         APP_TYPES = %w[MAIN GAMES].freeze
         TESTING_TYPES = %w[ALL RELEASE ALPHA].freeze
@@ -42,7 +43,7 @@ module Fastlane
           full_description: { key: :fullDescription, limit: :full_description },
           whats_new: { key: :whatsNew, limit: :whats_new },
           moder_info: { key: :moderInfo, limit: :moder_info },
-          price_value: { key: :priceValue }
+          price_value: { key: :priceValue, positive: true }
         }.freeze
 
         SERVICES_UNKNOWN = 'Unknown'.freeze
@@ -112,8 +113,11 @@ module Fastlane
           each_version(package_name, testing_type: testing_type).max_by { |v| v['versionCode'].to_i }
         end
 
-        def create_draft(package_name, attributes = {})
+        # submit_now tells that the draft goes to moderation right away, so the
+        # 24 hours to 60 days window of a DELAYED date can be checked up front.
+        def create_draft(package_name, submit_now: false, **attributes)
           payload = build_draft_payload(attributes)
+          Publication.check_window!(payload[:publishDateTime]) if submit_now && payload[:publishDateTime]
           response = client.post(
             "/public/v1/application/#{package_name}/version",
             body: payload,
@@ -151,7 +155,7 @@ module Fastlane
         def commit(package_name, version_id, priority_update: nil)
           client.post(
             "/public/v1/application/#{package_name}/version/#{version_id}/commit",
-            params: { priorityUpdate: priority_update },
+            params: { priorityUpdate: Publication.priority!(priority_update) },
             context: 'отправка черновика на модерацию'
           ).ensure_success!
         end
@@ -171,11 +175,9 @@ module Fastlane
         end
 
         def update_publish_settings(package_name, version_id, publish_type: nil, publish_datetime: nil, partial_value: nil)
-          payload = {}
-          payload[:publishType] = validate_publish_type!(publish_type) if publish_type
-          payload[:publishDateTime] = publish_datetime if publish_datetime
-          payload[:partialValue] = validate_partial_value!(partial_value) if partial_value
-          raise ConfigurationError, 'не переданы настройки публикации' if payload.empty?
+          payload = Publication.settings_payload(
+            publish_type: publish_type, publish_datetime: publish_datetime, partial_value: partial_value
+          )
 
           client.post(
             "/public/v1/application/#{package_name}/version/#{version_id}/publish-settings",
@@ -210,23 +212,16 @@ module Fastlane
         end
 
         def publication_payload(attributes)
-          payload = {}
-          publish_type = attributes[:publish_type]
-          payload[:publishType] = validate_publish_type!(publish_type) if publish_type
-
-          if publish_type == 'DELAYED'
-            datetime = attributes[:publish_datetime]
-            raise ConfigurationError, 'для publish_type = DELAYED обязателен publish_datetime' if datetime.to_s.empty?
-
-            payload[:publishDateTime] = datetime
-          end
-
-          payload[:partialValue] = validate_partial_value!(attributes[:partial_value]) if attributes[:partial_value]
-          payload
+          Publication.draft_payload(
+            publish_type: attributes[:publish_type],
+            publish_datetime: attributes[:publish_datetime],
+            partial_value: attributes[:partial_value]
+          )
         end
 
         def cast_field(value, spec, name)
           return validate_inclusion!(value, spec[:allowed], name.to_s) if spec[:allowed]
+          return positive!(value, name) if spec[:positive]
           return truncate!(value, spec[:limit]) if spec[:limit]
 
           value
@@ -258,15 +253,9 @@ module Fastlane
           raise ConfigurationError, "файл сборки не найден: #{file_path}" unless File.file?(file_path)
         end
 
-        def validate_publish_type!(value)
-          validate_inclusion!(value, PUBLISH_TYPES, 'publish_type')
-        end
-
-        def validate_partial_value!(value)
-          number = value.to_i
-          unless PARTIAL_VALUES.include?(number)
-            raise ConfigurationError, "partial_value должен быть одним из #{PARTIAL_VALUES.join(', ')}, получено #{value}"
-          end
+        def positive!(value, name)
+          number = Integer(value, exception: false)
+          raise ConfigurationError, "#{name} должен быть целым числом больше 0, получено #{value}" unless number&.positive?
 
           number
         end

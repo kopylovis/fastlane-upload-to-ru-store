@@ -121,13 +121,7 @@ module Fastlane
             default_value: true,
             type: Boolean
           ),
-          FastlaneCore::ConfigItem.new(
-            key: :priority_update,
-            env_name: 'RUSTORE_PRIORITY_UPDATE',
-            description: 'Priority update value passed to the moderation request',
-            optional: true,
-            type: Integer
-          )
+          Options.priority_update
         ]
       end
 
@@ -160,7 +154,7 @@ module Fastlane
               gms_apk: "app-gms.apk",
               hms_apk: "app-hms.apk",
               publish_type: "DELAYED",
-              publish_datetime: "2026-06-01T12:00:00+03:00"
+              publish_datetime: "2027-06-01T12:00:00+03:00"
             )
           DELAYED
         ]
@@ -184,6 +178,7 @@ module Fastlane
           publish_type: params[:publish_type],
           publish_datetime: params[:publish_datetime],
           changelog_path: params[:changelog_path],
+          submit_now: params[:submit_for_moderation],
           **draft_attributes(params)
         )
         UI.message("Создан черновик ##{draft_id}")

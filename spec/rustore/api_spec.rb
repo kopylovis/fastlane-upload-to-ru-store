@@ -81,6 +81,16 @@ describe Fastlane::Helper::Rustore::Api do
       expect { api.create_draft(pkg, age_legal: '7+') }.to raise_error(config_error, /age_legal/)
     end
 
+    it 'refuses a zero price' do
+      expect { api.create_draft(pkg, price_value: 0) }.to raise_error(config_error, /price_value/)
+    end
+
+    it 'checks the DELAYED window when the draft goes to moderation at once' do
+      soon = (Time.now + 3600).iso8601
+      expect { api.create_draft(pkg, publish_type: 'DELAYED', publish_datetime: soon, submit_now: true) }
+        .to raise_error(config_error, /24 часа/)
+    end
+
     it 'enforces the documented field limits' do
       expect { api.create_draft(pkg, short_description: 'x' * 81) }
         .to raise_error(config_error, /short_description длиннее 80/)

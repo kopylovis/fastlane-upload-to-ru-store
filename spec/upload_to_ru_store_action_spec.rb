@@ -36,10 +36,10 @@ describe Fastlane::Actions::UploadToRuStoreAction do
   end
 
   it 'forwards publish_datetime to create_draft' do
-    described_class.run(base_params.merge(publish_type: 'DELAYED', publish_datetime: '2026-06-01T12:00:00+03:00'))
+    described_class.run(base_params.merge(publish_type: 'DELAYED', publish_datetime: '2099-06-01T12:00:00+03:00'))
 
     expect(helper).to have_received(:create_draft).with(
-      hash_including(publish_type: 'DELAYED', publish_datetime: '2026-06-01T12:00:00+03:00')
+      hash_including(publish_type: 'DELAYED', publish_datetime: '2099-06-01T12:00:00+03:00')
     )
   end
 
