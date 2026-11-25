@@ -158,6 +158,20 @@ module Fastlane
           extract_version_id(response)
         end
 
+        # Changes fields of a draft that has not been sent to moderation yet,
+        # through the v2 PATCH. The rules match those of create_draft.
+        def edit_draft(package_name, version_id, **attributes)
+          payload = build_draft_payload(attributes)
+          raise ConfigurationError, 'не передано ни одного поля черновика' if payload.empty?
+
+          client.patch(
+            "/public/v2/application/#{package_name}/version/#{version_id}",
+            body: payload,
+            context: 'редактирование черновика'
+          ).ensure_success!
+          version_id
+        end
+
         def delete_draft(package_name, version_id)
           client.delete("/public/v1/application/#{package_name}/version/#{version_id}", context: 'удаление черновика')
         end

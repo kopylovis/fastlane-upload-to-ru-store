@@ -99,13 +99,47 @@ describe 'RuStore lifecycle actions' do
     end
   end
 
+  describe Fastlane::Actions::RustoreEditDraftAction do
+    it 'edits the given draft with the fields passed' do
+      allow(helper).to receive(:edit_draft).and_return(4)
+
+      result = described_class.run(auth.merge(version_id: 4, short_description: 'Новое'))
+
+      expect(result).to eq(4)
+      expect(helper).to have_received(:edit_draft).with(hash_including(version_id: 4, short_description: 'Новое'))
+    end
+
+    it 'refuses an edit without fields' do
+      expect { described_class.run(auth.merge(version_id: 4)) }.to raise_error(fastlane_error, /ни одного поля/)
+    end
+  end
+
+  describe Fastlane::Actions::RustoreDeleteDraftAction do
+    it 'deletes one draft when version_id is given' do
+      allow(helper).to receive(:delete_draft)
+
+      described_class.run(auth.merge(version_id: 4))
+
+      expect(helper).to have_received(:delete_draft).with(hash_including(version_id: 4))
+    end
+
+    it 'deletes every draft otherwise' do
+      allow(helper).to receive(:remove_drafts)
+
+      described_class.run(auth)
+
+      expect(helper).to have_received(:remove_drafts)
+    end
+  end
+
   describe 'plugin surface' do
     it 'registers every action with fastlane' do
       names = Fastlane::Actions.constants.map(&:to_s)
       expect(names).to include(
         'UploadToRuStoreAction', 'RustoreVersionStatusAction',
         'RustorePublishVersionAction', 'RustoreArchiveVersionAction',
-        'RustorePublishSettingsAction', 'RustoreApplicationsAction'
+        'RustorePublishSettingsAction', 'RustoreApplicationsAction',
+        'RustoreEditDraftAction', 'RustoreDeleteDraftAction'
       )
     end
 
@@ -116,7 +150,9 @@ describe 'RuStore lifecycle actions' do
         Fastlane::Actions::RustorePublishVersionAction,
         Fastlane::Actions::RustoreArchiveVersionAction,
         Fastlane::Actions::RustorePublishSettingsAction,
-        Fastlane::Actions::RustoreApplicationsAction
+        Fastlane::Actions::RustoreApplicationsAction,
+        Fastlane::Actions::RustoreEditDraftAction,
+        Fastlane::Actions::RustoreDeleteDraftAction
       ].each do |action|
         expect(action.description).to be_a(String)
         expect(action.details).to be_a(String)

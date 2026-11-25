@@ -21,6 +21,8 @@ Fastlane-плагин для публикации Android-приложений �
   - [rustore_publish_settings](#rustore_publish_settings)
   - [rustore_archive_version](#rustore_archive_version)
   - [rustore_applications](#rustore_applications)
+  - [rustore_edit_draft](#rustore_edit_draft)
+  - [rustore_delete_draft](#rustore_delete_draft)
 - [Рецепты](#рецепты)
 - [Переменные окружения](#переменные-окружения)
 - [Отладка](#отладка)
@@ -281,6 +283,41 @@ rustore_archive_version(
 apps = rustore_applications(
   key_id: ENV["RUSTORE_KEY_ID"],
   private_key: ENV["RUSTORE_PRIVATE_KEY"]
+)
+```
+
+---
+
+### rustore_edit_draft
+
+Меняет поля черновика, который еще не ушел на модерацию. Принимает те же
+метаданные, что и `upload_to_ru_store`, плюс `publish_type`, `publish_datetime`,
+`partial_value` и `changelog_path`, и отправляет только переданные. Без
+`version_id` правит текущий черновик пакета. Возвращает `versionId`.
+
+```ruby
+rustore_edit_draft(
+  package_name: "com.example.app",
+  key_id: ENV["RUSTORE_KEY_ID"],
+  private_key: ENV["RUSTORE_PRIVATE_KEY"],
+  short_description: "Новое краткое описание",
+  categories: ["news"]
+)
+```
+
+---
+
+### rustore_delete_draft
+
+С `version_id` удаляет этот черновик, без него удаляет все черновики пакета.
+RuStore удаляет только версии, которые ни разу не публиковались.
+
+```ruby
+rustore_delete_draft(
+  package_name: "com.example.app",
+  key_id: ENV["RUSTORE_KEY_ID"],
+  private_key: ENV["RUSTORE_PRIVATE_KEY"],
+  version_id: 12345
 )
 ```
 
