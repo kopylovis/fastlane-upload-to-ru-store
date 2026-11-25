@@ -1,6 +1,7 @@
 require 'fastlane_core/configuration/config_item'
 require_relative 'api'
 require_relative 'client'
+require_relative 'publication'
 
 module Fastlane
   module Helper
@@ -73,9 +74,9 @@ module Fastlane
             optional: true,
             type: String,
             verify_block: proc do |value|
-              DateTime.iso8601(value)
-            rescue ArgumentError
-              UI.user_error!('Неверный формат publish_datetime. Ожидается ISO8601, например 2026-06-01T12:00:00+03:00')
+              Publication.parse_datetime!(value)
+            rescue ConfigurationError => e
+              UI.user_error!("Неверный формат publish_datetime (ISO8601): #{e.message}")
             end
           )
         end
@@ -91,6 +92,21 @@ module Fastlane
               unless Api::PARTIAL_VALUES.include?(value.to_i)
                 UI.user_error!("partial_value должен быть одним из #{Api::PARTIAL_VALUES.join(', ')}")
               end
+            end
+          )
+        end
+
+        def priority_update
+          FastlaneCore::ConfigItem.new(
+            key: :priority_update,
+            env_name: 'RUSTORE_PRIORITY_UPDATE',
+            description: 'Update priority sent with the moderation request, 0 to 5',
+            optional: true,
+            type: Integer,
+            verify_block: proc do |value|
+              Publication.priority!(value)
+            rescue ConfigurationError => e
+              UI.user_error!(e.message)
             end
           )
         end

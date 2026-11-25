@@ -42,14 +42,18 @@ module Fastlane
           end
         end
 
-        def create_draft(api:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil, **attributes)
+        def create_draft(api:, package_name:, publish_type: nil, publish_datetime: nil, changelog_path: nil, submit_now: false,
+                         **attributes)
           wrap do
+            if publish_datetime && publish_type != Rustore::Publication::DELAYED
+              UI.important('publish_datetime учитывается только с publish_type: DELAYED, сейчас он не будет отправлен')
+            end
             payload = attributes.merge(publish_type: publish_type, publish_datetime: publish_datetime)
             if changelog_path
               UI.important('Указаны и changelog_path, и whats_new. Будет использован файл') if attributes[:whats_new]
               payload[:whats_new] = read_changelog(changelog_path)
             end
-            api.create_draft(package_name, payload)
+            api.create_draft(package_name, submit_now: submit_now, **payload)
           end
         end
 

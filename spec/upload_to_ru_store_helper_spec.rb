@@ -69,12 +69,12 @@ describe Fastlane::Helper::UploadToRuStoreHelper do
   describe '.create_draft' do
     it 'sends publishDateTime for DELAYED publishing' do
       stub = stub_request(:post, "#{base}/public/v1/application/#{pkg}/version")
-             .with(body: { publishType: 'DELAYED', publishDateTime: '2026-06-01T12:00:00+03:00' })
+             .with(body: { publishType: 'DELAYED', publishDateTime: '2099-06-01T12:00:00+03:00' })
              .to_return(SpecHelper.json(body: 42))
 
       id = described_class.create_draft(
         api: api, package_name: pkg,
-        publish_type: 'DELAYED', publish_datetime: '2026-06-01T12:00:00+03:00'
+        publish_type: 'DELAYED', publish_datetime: '2099-06-01T12:00:00+03:00'
       )
 
       expect(id).to eq(42)
