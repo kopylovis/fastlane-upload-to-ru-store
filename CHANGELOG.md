@@ -3,6 +3,44 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии следуют [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.2.0] - 2026-11-25
+
+### Добавлено
+- Загрузка иконки и скриншотов телефона, планшета и ТВ: параметры `icon`,
+  `screenshots`, `tablet_screenshots`, `tv_screenshots` у `upload_to_ru_store`
+  и действие `rustore_upload_images` для существующего черновика.
+- Действие `rustore_edit_draft` правит черновик через новый v2 PATCH.
+- Действие `rustore_delete_draft` удаляет один черновик или все черновики пакета.
+- Действие `rustore_applications` выводит список приложений аккаунта.
+- Новые поля черновика из API: `categories`, `seo_tag_ids`, `faq`,
+  `developer_contacts`, `video`, `background_video`, `privacy_explanation`,
+  `privacy_data_types`, `package_sdk`, `in_app_purchase_types` и описания для ТВ.
+- `rustore_version_status` дополняет данные детальной карточкой v2, печатает
+  комментарий модератора (`statusComment`) и принимает `version_id`.
+- Параметр `base_url` (`RUSTORE_BASE_URL`) у всех действий.
+- Токен обновляется сам за минуту до истечения и после ответа 401.
+
+### Исправлено
+- Повторная загрузка сборки после сбоя отправляла запрос без файла.
+- POST-запросы повторялись после таймаута чтения, когда RuStore мог их уже
+  выполнить. Повторы при 429 и 5xx, обещанные в README, не работали вовсе.
+- Параметр `timeout` ни на что не влиял.
+- Основной APK уходил с `servicesType=GMS`, которого нет в API. Теперь `Unknown`.
+- Changelog на кириллице падал с `Encoding::InvalidByteSequenceError`,
+  если в CI не задана локаль (`LANG=C`).
+- `rustore_archive_version` не проверял статус версии, хотя обещал.
+- `Api#applications` передавал `page` и `size`, которых у списка приложений нет.
+- Правила публикации проверяются до запроса: `partial_value` нельзя менять
+  вместе с `publish_type`, раскатка не сочетается с `DELAYED`, дата отложенной
+  публикации нужна с временем и поясом и в окне 24 часа..60 дней,
+  `priority_update` от 0 до 5, `price_value` больше 0.
+- Ошибка авторизации из-за расхождения часов теперь объясняет причину.
+
+### Изменено
+- Черновики ищутся фильтром `versionStatuses` на стороне RuStore.
+- Если переданы и `changelog_path`, и `whats_new`, плагин предупреждает,
+  что используется файл.
+
 ## [1.1.0] — 2026-09-19
 
 ### Добавлено
