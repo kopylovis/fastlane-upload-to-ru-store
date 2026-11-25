@@ -106,6 +106,10 @@ module Fastlane
           wrap { api.latest_version(package_name, testing_type: testing_type) }
         end
 
+        def applications(api:, app_name: nil, app_package: nil)
+          wrap { api.each_application(app_name: app_name, app_package: app_package).to_a }
+        end
+
         def version_detail(api:, package_name:, version_id:)
           wrap { api.version_detail(package_name, version_id) }
         end
