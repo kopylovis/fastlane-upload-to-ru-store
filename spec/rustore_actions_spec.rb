@@ -88,13 +88,24 @@ describe 'RuStore lifecycle actions' do
     end
   end
 
+  describe Fastlane::Actions::RustoreApplicationsAction do
+    it 'returns the applications of the account' do
+      allow(helper).to receive(:applications).and_return([{ 'packageName' => 'com.example.app' }])
+
+      result = described_class.run(key_id: 'kid', private_key: 'pem', package_name: 'com.example')
+
+      expect(result.first['packageName']).to eq('com.example.app')
+      expect(helper).to have_received(:applications).with(hash_including(app_package: 'com.example'))
+    end
+  end
+
   describe 'plugin surface' do
     it 'registers every action with fastlane' do
       names = Fastlane::Actions.constants.map(&:to_s)
       expect(names).to include(
         'UploadToRuStoreAction', 'RustoreVersionStatusAction',
         'RustorePublishVersionAction', 'RustoreArchiveVersionAction',
-        'RustorePublishSettingsAction'
+        'RustorePublishSettingsAction', 'RustoreApplicationsAction'
       )
     end
 
@@ -104,7 +115,8 @@ describe 'RuStore lifecycle actions' do
         Fastlane::Actions::RustoreVersionStatusAction,
         Fastlane::Actions::RustorePublishVersionAction,
         Fastlane::Actions::RustoreArchiveVersionAction,
-        Fastlane::Actions::RustorePublishSettingsAction
+        Fastlane::Actions::RustorePublishSettingsAction,
+        Fastlane::Actions::RustoreApplicationsAction
       ].each do |action|
         expect(action.description).to be_a(String)
         expect(action.details).to be_a(String)

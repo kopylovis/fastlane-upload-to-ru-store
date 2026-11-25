@@ -20,6 +20,7 @@ Fastlane-плагин для публикации Android-приложений �
   - [rustore_publish_version](#rustore_publish_version)
   - [rustore_publish_settings](#rustore_publish_settings)
   - [rustore_archive_version](#rustore_archive_version)
+  - [rustore_applications](#rustore_applications)
 - [Рецепты](#рецепты)
 - [Переменные окружения](#переменные-окружения)
 - [Отладка](#отладка)
@@ -240,6 +241,21 @@ rustore_archive_version(
   key_id: ENV["RUSTORE_KEY_ID"],
   private_key: ENV["RUSTORE_PRIVATE_KEY"],
   version_id: 12345
+)
+```
+
+---
+
+### rustore_applications
+
+Список приложений аккаунта, которому принадлежит ключ. Возвращает массив Hash
+с `packageName`, `appName`, `appStatus`, `versionName`, `versionCode` и другими
+полями. `package_name` и `app_name` сужают поиск.
+
+```ruby
+apps = rustore_applications(
+  key_id: ENV["RUSTORE_KEY_ID"],
+  private_key: ENV["RUSTORE_PRIVATE_KEY"]
 )
 ```
 

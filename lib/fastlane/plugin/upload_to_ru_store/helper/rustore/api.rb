@@ -10,6 +10,7 @@ module Fastlane
     module Rustore
       class Api
         PAGE_SIZE = 100
+        APPS_PAGE_SIZE = 1000
         TOKEN_TTL = 900
         MAX_PAGES = 50
 
@@ -81,32 +82,63 @@ module Fastlane
           token
         end
 
-        def applications(page: 0, size: PAGE_SIZE)
-          client.get('/public/v1/application', params: { page: page, size: size }, context: 'список приложений')
-                .ensure_success!.payload
+        # The application list pages with a continuation token, not page/size.
+        def applications(app_name: nil, app_package: nil, page_size: nil, continuation_token: nil)
+          params = { appName: app_name, appPackage: app_package }
+          if page_size || continuation_token
+            params.merge!(pagination: true, pageSize: page_size || APPS_PAGE_SIZE, continuationToken: continuation_token)
+          end
+          client.get('/public/v1/application', params: params, context: 'список приложений').ensure_success!.payload
         end
 
-        def versions(package_name, testing_type: 'ALL', page: 0, size: PAGE_SIZE, ids: nil)
+        def each_application(app_name: nil, app_package: nil, &block)
+          return to_enum(:each_application, app_name: app_name, app_package: app_package) unless block_given?
+
+          token = nil
+          MAX_PAGES.times do
+            payload = applications(app_name: app_name, app_package: app_package, page_size: APPS_PAGE_SIZE, continuation_token: token)
+            payload = {} unless payload.is_a?(Hash)
+            payload['content'].to_a.each(&block)
+            token = payload['continuationToken']
+            break if token.to_s.empty?
+          end
+        end
+
+        # RuStore answers either a page (page and size) or the versions listed in
+        # ids, never both. Without filterTestingType it returns RELEASE only.
+        def versions(package_name, testing_type: 'ALL', statuses: nil, page: 0, size: PAGE_SIZE, ids: nil)
+          params = { filterTestingType: testing_type, versionStatuses: Array(statuses).join(',').then { |v| v unless v.empty? } }
+          params.merge!(ids ? { ids: Array(ids).join(',') } : { page: page, size: size })
           client.get(
             "/public/v1/application/#{package_name}/version",
-            params: { filterTestingType: testing_type, page: page, size: size, ids: ids },
+            params: params,
             context: 'получение списка версий'
           ).ensure_success!.payload
         end
 
-        def each_version(package_name, testing_type: 'ALL', &block)
-          return to_enum(:each_version, package_name, testing_type: testing_type) unless block_given?
+        def each_version(package_name, testing_type: 'ALL', statuses: nil, &block)
+          return to_enum(:each_version, package_name, testing_type: testing_type, statuses: statuses) unless block_given?
 
           (0...MAX_PAGES).each do |page|
-            payload = versions(package_name, testing_type: testing_type, page: page)
-            content = payload.is_a?(Hash) ? payload['content'].to_a : []
+            payload = versions(package_name, testing_type: testing_type, statuses: statuses, page: page)
+            payload = {} unless payload.is_a?(Hash)
+            content = payload['content'].to_a
             content.each(&block)
-            break if content.size < PAGE_SIZE
+            break if last_page?(payload, page, content.size)
           end
         end
 
+        def last_page?(payload, page, count)
+          return true if count < PAGE_SIZE
+
+          total = payload['totalPages']
+          !total.nil? && page + 1 >= total.to_i
+        end
+
+        # The status filter runs on the server, and once more here in case an
+        # older API ignores versionStatuses.
         def versions_with_status(package_name, status, testing_type: 'ALL')
-          each_version(package_name, testing_type: testing_type).select { |v| v['versionStatus'] == status }
+          each_version(package_name, testing_type: testing_type, statuses: [status]).select { |v| v['versionStatus'] == status }
         end
 
         def latest_version(package_name, testing_type: 'ALL')

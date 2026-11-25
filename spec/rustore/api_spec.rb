@@ -116,6 +116,48 @@ describe Fastlane::Helper::Rustore::Api do
     end
   end
 
+  describe '#versions' do
+    it 'filters by status on the server' do
+      stub = stub_request(:get, "#{base}/public/v1/application/#{pkg}/version")
+             .with(query: { filterTestingType: 'ALL', versionStatuses: 'DRAFT', page: '0', size: '100' })
+             .to_return(SpecHelper.json(body: { content: [{ 'versionId' => 1, 'versionStatus' => 'DRAFT' }] }))
+
+      expect(api.versions_with_status(pkg, 'DRAFT').map { |v| v['versionId'] }).to eq([1])
+      expect(stub).to have_been_requested
+    end
+
+    it 'sends ids without page and size' do
+      stub = stub_request(:get, "#{base}/public/v1/application/#{pkg}/version")
+             .with(query: { filterTestingType: 'ALL', ids: '7' })
+             .to_return(SpecHelper.json(body: { content: [] }))
+
+      api.versions(pkg, ids: 7)
+
+      expect(stub).to have_been_requested
+    end
+
+    it 'stops at totalPages' do
+      full = { body: { content: Array.new(100) { |i| { 'versionId' => i } }, totalPages: 1 } }
+      stub = stub_request(:get, "#{base}/public/v1/application/#{pkg}/version").with(query: hash_including({}))
+                                                                               .to_return(SpecHelper.json(full))
+
+      expect(api.each_version(pkg).count).to eq(100)
+      expect(stub).to have_been_requested.once
+    end
+  end
+
+  describe '#each_application' do
+    it 'follows the continuation token' do
+      url = "#{base}/public/v1/application"
+      stub_request(:get, url).with(query: { pagination: 'true', pageSize: '1000' })
+                             .to_return(SpecHelper.json(body: { content: [{ packageName: 'a' }], continuationToken: 'next' }))
+      stub_request(:get, url).with(query: { pagination: 'true', pageSize: '1000', continuationToken: 'next' })
+                             .to_return(SpecHelper.json(body: { content: [{ packageName: 'b' }] }))
+
+      expect(api.each_application.map { |app| app['packageName'] }).to eq(%w[a b])
+    end
+  end
+
   describe '#latest_version' do
     it 'picks the highest versionCode' do
       payload = { body: { content: [
