@@ -138,6 +138,31 @@ RUSTORE_PRIVATE_KEY=$(tr -d '\n' < key.pem)
 | `full_description` | 4000 символов | Полное описание |
 | `moder_info` | 180 символов | Комментарий для модератора |
 | `price_value` | целое больше 0 | Цена в копейках для платных приложений |
+| `categories` | до 2, без повторов | Категории, например `["health", "news"]` |
+| `seo_tag_ids` | до 5 | ID поисковых тегов, все для одного `app_type` |
+| `faq` | до 10 | Массив Hash с `question` (120 символов) и `answer` (500 символов) |
+| `developer_contacts` | Hash | `email`, `website`, `vk_community`, `max_messenger` |
+| `video`, `background_video` | Hash | `orientation` (`LANDSCAPE`/`PORTRAIT`) и `url` |
+| `privacy_explanation` | 4000 символов | Зачем приложению чувствительные разрешения |
+| `privacy_data_types` | до 50 | Типы данных, например `["location", "contacts"]` |
+| `package_sdk` | Hash | `ads_sdks` и `payment_sdks`, до 50 в каждом |
+| `in_app_purchase_types` | `PRODUCTS`, `SUBSCRIPTIONS` | Типы встроенных покупок |
+| `short_description_tv` | 80 символов | Краткое описание для ТВ |
+| `full_description_tv` | 4000 символов | Полное описание для ТВ |
+| `whats_new_tv` | 5000 символов | "Что нового" для ТВ |
+
+Поля, которые не переданы, RuStore берет из активной версии. Ключи Hash можно
+писать и в snake_case, и в camelCase. Для полей-Hash переменных окружения нет,
+у остальных это `RUSTORE_` и имя параметра в верхнем регистре.
+
+```ruby
+upload_to_ru_store(
+  ...,
+  categories: ["news"],
+  faq: [{ question: "Сколько идет модерация?", answer: "Обычно до трех рабочих дней" }],
+  developer_contacts: { email: "dev@example.com", website: "https://example.com" }
+)
+```
 
 #### Поведение
 

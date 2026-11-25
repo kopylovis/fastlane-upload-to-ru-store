@@ -2,6 +2,7 @@ require 'fastlane_core/configuration/config_item'
 require_relative 'api'
 require_relative 'client'
 require_relative 'publication'
+require_relative 'draft_fields'
 
 module Fastlane
   module Helper
@@ -167,6 +168,46 @@ module Fastlane
               UI.user_error!("Файл не найден (#{key}): #{value}") unless File.file?(value)
             end
           )
+        end
+
+        # Store metadata of a draft: [key, type, description]. Hash fields take no
+        # environment variable, since fastlane cannot parse one from a string.
+        METADATA = [
+          [:whats_new, String, "Release notes given inline, up to #{Api::LIMITS[:whats_new]} characters"],
+          [:app_name, String, "Application name, up to #{Api::LIMITS[:app_name]} characters"],
+          [:app_type, String, "Application type: #{DraftFields::APP_TYPES.join('/')}"],
+          [:categories, Array, 'Up to 2 unique categories, e.g. ["health", "news"]'],
+          [:age_legal, String, "Age rating: #{DraftFields::AGE_LEGAL.join('/')}"],
+          [:short_description, String, "Short description, up to #{Api::LIMITS[:short_description]} characters"],
+          [:full_description, String, "Full description, up to #{Api::LIMITS[:full_description]} characters"],
+          [:short_description_tv, String, 'Short description for TV, up to 80 characters'],
+          [:full_description_tv, String, 'Full description for TV, up to 4000 characters'],
+          [:whats_new_tv, String, 'Release notes for TV, up to 5000 characters'],
+          [:moder_info, String, "Note for the moderator, up to #{Api::LIMITS[:moder_info]} characters"],
+          [:price_value, Integer, 'Price in kopecks for paid applications, above 0'],
+          [:seo_tag_ids, Array, 'Up to 5 search tag IDs, all for the same app_type'],
+          [:faq, Array, 'Up to 10 Hashes with question (120 characters) and answer (500 characters)'],
+          [:developer_contacts, Hash, 'Hash with email, website, vk_community and max_messenger'],
+          [:video, Hash, 'Card video: Hash with orientation (LANDSCAPE/PORTRAIT) and url'],
+          [:background_video, Hash, 'Background video: Hash with orientation (LANDSCAPE/PORTRAIT) and url'],
+          [:privacy_explanation, String, 'Why the app needs sensitive permissions, up to 4000 characters'],
+          [:privacy_data_types, Array, 'Up to 50 data types the app accesses, e.g. ["location", "contacts"]'],
+          [:package_sdk, Hash, 'Integrated SDKs: Hash with ads_sdks and payment_sdks arrays'],
+          [:in_app_purchase_types, Array, 'In-app purchase types: PRODUCTS, SUBSCRIPTIONS']
+        ].freeze
+
+        METADATA_KEYS = METADATA.map(&:first).freeze
+
+        def metadata
+          METADATA.map do |key, type, description|
+            FastlaneCore::ConfigItem.new(
+              key: key,
+              env_name: (type == Hash ? nil : "RUSTORE_#{key.to_s.upcase}"),
+              description: description,
+              optional: true,
+              type: type
+            )
+          end
         end
 
         def auth

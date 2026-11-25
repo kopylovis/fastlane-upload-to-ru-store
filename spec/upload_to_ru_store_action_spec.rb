@@ -51,6 +51,14 @@ describe Fastlane::Actions::UploadToRuStoreAction do
     )
   end
 
+  it 'forwards the newer draft fields' do
+    described_class.run(base_params.merge(categories: %w[news], faq: [{ question: 'q', answer: 'a' }]))
+
+    expect(helper).to have_received(:create_draft).with(
+      hash_including(categories: %w[news], faq: [{ question: 'q', answer: 'a' }])
+    )
+  end
+
   it 'uploads the aab and submits the draft' do
     described_class.run(base_params)
 
