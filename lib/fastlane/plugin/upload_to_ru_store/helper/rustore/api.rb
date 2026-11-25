@@ -9,6 +9,7 @@ module Fastlane
     module Rustore
       class Api
         PAGE_SIZE = 100
+        TOKEN_TTL = 900
         MAX_PAGES = 50
 
         PUBLISH_TYPES = %w[MANUAL INSTANTLY DELAYED].freeze
@@ -61,12 +62,17 @@ module Fastlane
             '/public/auth/',
             body: { keyId: signer.key_id, timestamp: timestamp, signature: signer.sign(timestamp) },
             context: 'аутентификация'
-          ).ensure_success!
+          )
+          explain_clock_skew!(response)
+          response.ensure_success!
 
-          token = response.payload.is_a?(Hash) ? response.payload['jwe'] : nil
+          payload = response.payload.is_a?(Hash) ? response.payload : {}
+          token = payload['jwe']
           raise ApiError.new('RuStore не вернул токен', context: 'аутентификация') if token.to_s.empty?
 
-          client.token = token
+          client.assign_token(token, ttl: payload['ttl'] || TOKEN_TTL)
+          client.authenticator = -> { authenticate(signer) }
+          token
         end
 
         def applications(page: 0, size: PAGE_SIZE)
@@ -173,6 +179,16 @@ module Fastlane
         end
 
         private
+
+        def explain_clock_skew!(response)
+          return if response.success? || !response.message.to_s.match?(/timestamp/i)
+
+          raise ApiError.new(
+            "#{response.message}. RuStore принимает подпись, только если часы машины расходятся с его часами " \
+            'меньше чем на 60 секунд. Проверьте время на раннере',
+            status: response.status, code: response.code, context: 'аутентификация'
+          )
+        end
 
         def build_draft_payload(attributes)
           payload = publication_payload(attributes)

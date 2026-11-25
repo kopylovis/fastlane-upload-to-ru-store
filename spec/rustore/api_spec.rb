@@ -18,6 +18,43 @@ describe Fastlane::Helper::Rustore::Api do
 
       expect(api.client.token).to eq('fresh')
     end
+
+    let(:signer) { Fastlane::Helper::Rustore::Signer.new(key_id: 'kid', private_key: SpecHelper.rsa_key.to_pem) }
+    let(:versions_url) { "#{base}/public/v1/application/#{pkg}/version" }
+
+    it 'renews an expired token and repeats the request once' do
+      stub_request(:post, "#{base}/public/auth/")
+        .to_return(SpecHelper.json(body: { jwe: 'old', ttl: 900 }))
+        .then.to_return(SpecHelper.json(body: { jwe: 'new', ttl: 900 }))
+      stub_request(:get, versions_url).with(query: hash_including({}), headers: { 'Public-Token' => 'old' })
+                                      .to_return(SpecHelper.error(401, message: 'token expired'))
+      stub_request(:get, versions_url).with(query: hash_including({}), headers: { 'Public-Token' => 'new' })
+                                      .to_return(SpecHelper.json(body: { content: [] }))
+
+      api.authenticate(signer)
+
+      expect(api.versions(pkg)).to eq('content' => [])
+      expect(api.client.token).to eq('new')
+    end
+
+    it 'renews the token shortly before it expires' do
+      auth = stub_request(:post, "#{base}/public/auth/")
+             .to_return(SpecHelper.json(body: { jwe: 'short', ttl: 30 }))
+             .then.to_return(SpecHelper.json(body: { jwe: 'long', ttl: 900 }))
+      stub_request(:get, versions_url).with(query: hash_including({}), headers: { 'Public-Token' => 'long' })
+                                      .to_return(SpecHelper.json(body: { content: [] }))
+
+      api.authenticate(signer)
+      api.versions(pkg)
+
+      expect(auth).to have_been_requested.twice
+    end
+
+    it 'points at the clock when RuStore rejects the timestamp' do
+      stub_request(:post, "#{base}/public/auth/").to_return(SpecHelper.error(400, message: 'Range timestamp not valid'))
+
+      expect { api.authenticate(signer) }.to raise_error(api_error, /60 секунд/)
+    end
   end
 
   describe '#create_draft' do
