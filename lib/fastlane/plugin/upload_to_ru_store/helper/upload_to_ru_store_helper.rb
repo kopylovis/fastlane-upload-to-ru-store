@@ -67,6 +67,10 @@ module Fastlane
           end
         end
 
+        def current_draft(api:, package_name:)
+          wrap { current_draft_id(api, package_name) }
+        end
+
         def delete_draft(api:, package_name:, version_id:)
           wrap do
             api.delete_draft(package_name, version_id).ensure_success!
@@ -81,6 +85,22 @@ module Fastlane
               file_path: file_path, build_type: build_type, service_type: service_type
             )
             UI.success("Загружено: #{File.basename(file_path)}")
+          end
+        end
+
+        # Uploads the icon and screenshots of a draft. screenshots maps a device
+        # type (SCREENSHOT, TABLET_SCREENSHOT, TV_SCREENSHOT) to a list of files,
+        # uploaded in order into slots 0..9. With replace, screenshots of that type
+        # already on the draft (often copied from the active version) go first.
+        def upload_images(api:, package_name:, version_id:, icon: nil, screenshots: {}, orientation: nil, replace: true)
+          wrap do
+            if icon
+              api.upload_icon(package_name, version_id, icon)
+              UI.success("Загружена иконка: #{File.basename(icon)}")
+            end
+            screenshots.each do |type, paths|
+              upload_screenshot_set(api, package_name, version_id, type, Array(paths), orientation, replace)
+            end
           end
         end
 
@@ -173,6 +193,27 @@ module Fastlane
         end
 
         private
+
+        def upload_screenshot_set(api, package_name, version_id, type, paths, orientation, replace)
+          return if paths.empty?
+
+          side = Rustore::Media.screenshot_set!(type, paths, orientation)
+
+          remove_screenshots(api, package_name, version_id, type) if replace
+          paths.each_with_index do |path, ordinal|
+            api.upload_screenshot(package_name, version_id, path, orientation: side, ordinal: ordinal, type: type)
+          end
+          UI.success("#{type}: загружено #{paths.size} (#{side})")
+          return unless type == 'SCREENSHOT' && paths.size < Rustore::Media::SCREENSHOTS_TO_PUBLISH
+
+          UI.important("Для публикации нужно минимум #{Rustore::Media::SCREENSHOTS_TO_PUBLISH} скриншота, загружено #{paths.size}")
+        end
+
+        def remove_screenshots(api, package_name, version_id, type)
+          api.each_screenshot(package_name, version_id).select { |shot| shot['type'] == type }.each do |shot|
+            api.delete_screenshot(package_name, version_id, shot['id'])
+          end
+        end
 
         def current_draft_id(api, package_name)
           drafts = api.versions_with_status(package_name, Rustore::Api::STATUS_DRAFT)

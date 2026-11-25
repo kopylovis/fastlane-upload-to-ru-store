@@ -20,7 +20,8 @@ module Fastlane
       def self.details
         <<~DETAILS
           Creates a draft version in RuStore, fills in the metadata you pass, uploads the
-          build (an AAB or a main APK, plus an optional HMS APK) and submits the draft for moderation.
+          build (an AAB or a main APK, plus an optional HMS APK), the icon and screenshots
+          when given, and submits the draft for moderation.
 
           Existing drafts of the package are removed first, so a rerun after a failed
           attempt does not pile them up. Set remove_existing_drafts to false to keep them.
@@ -50,6 +51,7 @@ module Fastlane
           Options.existing_file(:changelog_path, 'RUSTORE_CHANGELOG_PATH',
                                 "Path to a changelog file, up to #{Api::LIMITS[:whats_new]} characters"),
           *Options.metadata,
+          *Options.images,
           FastlaneCore::ConfigItem.new(
             key: :remove_existing_drafts,
             env_name: 'RUSTORE_REMOVE_EXISTING_DRAFTS',
@@ -129,6 +131,7 @@ module Fastlane
         UI.message("Создан черновик ##{draft_id}")
 
         upload_builds(helper, api, draft_id, params)
+        upload_images(helper, api, draft_id, params)
         finish(helper, api, draft_id, params)
 
         Actions.lane_context[SharedValues::RUSTORE_VERSION_ID] = draft_id
@@ -152,6 +155,16 @@ module Fastlane
         return unless params[:hms_apk]
 
         helper.upload_build(**common, file_path: params[:hms_apk], build_type: 'apk', service_type: Api::SERVICES_HMS)
+      end
+
+      def self.upload_images(helper, api, draft_id, params)
+        return unless Options.images?(params)
+
+        helper.upload_images(
+          api: api, package_name: params[:package_name], version_id: draft_id,
+          icon: params[:icon], screenshots: Options.screenshot_sets(params),
+          orientation: params[:screenshots_orientation], replace: params[:replace_screenshots] != false
+        )
       end
 
       def self.finish(helper, api, draft_id, params)

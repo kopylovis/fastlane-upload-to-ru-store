@@ -3,6 +3,7 @@ require_relative 'api'
 require_relative 'client'
 require_relative 'publication'
 require_relative 'draft_fields'
+require_relative 'media'
 
 module Fastlane
   module Helper
@@ -208,6 +209,67 @@ module Fastlane
               type: type
             )
           end
+        end
+
+        SCREENSHOT_OPTIONS = {
+          screenshots: 'SCREENSHOT',
+          tablet_screenshots: 'TABLET_SCREENSHOT',
+          tv_screenshots: 'TV_SCREENSHOT'
+        }.freeze
+
+        def images
+          [
+            existing_file(:icon, 'RUSTORE_ICON', 'Path to the icon: PNG or JPEG, 512x512, up to 3 MB'),
+            screenshot_list(:screenshots, 'Phone screenshots in display order, up to 10 PNG or JPEG files'),
+            screenshot_list(:tablet_screenshots, 'Tablet screenshots in display order, up to 10 files'),
+            screenshot_list(:tv_screenshots, 'TV screenshots in display order, up to 10 files'),
+            FastlaneCore::ConfigItem.new(
+              key: :screenshots_orientation,
+              env_name: 'RUSTORE_SCREENSHOTS_ORIENTATION',
+              description: 'PORTRAIT or LANDSCAPE. Detected from the image size when omitted',
+              optional: true,
+              type: String,
+              verify_block: proc do |value|
+                unless Media::ORIENTATIONS.include?(value.upcase)
+                  UI.user_error!("screenshots_orientation: PORTRAIT или LANDSCAPE, получено #{value}")
+                end
+              end
+            ),
+            FastlaneCore::ConfigItem.new(
+              key: :replace_screenshots,
+              env_name: 'RUSTORE_REPLACE_SCREENSHOTS',
+              description: 'Delete screenshots of the same device type already on the draft before uploading',
+              optional: true,
+              default_value: true,
+              type: Boolean
+            )
+          ]
+        end
+
+        def screenshot_list(key, description)
+          FastlaneCore::ConfigItem.new(
+            key: key,
+            env_name: "RUSTORE_#{key.to_s.upcase}",
+            description: description,
+            optional: true,
+            type: Array,
+            verify_block: proc do |paths|
+              missing = Array(paths).reject { |path| File.file?(path) }
+              UI.user_error!("Файлы не найдены (#{key}): #{missing.join(', ')}") if missing.any?
+            end
+          )
+        end
+
+        # { 'SCREENSHOT' => [...], ... } for the screenshot options that are set.
+        def screenshot_sets(params)
+          SCREENSHOT_OPTIONS.each_with_object({}) do |(key, type), sets|
+            paths = Array(params[key])
+            sets[type] = paths unless paths.empty?
+          end
+        end
+
+        def images?(params)
+          !params[:icon].nil? || !screenshot_sets(params).empty?
         end
 
         def auth

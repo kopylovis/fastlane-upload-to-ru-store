@@ -132,6 +132,20 @@ describe 'RuStore lifecycle actions' do
     end
   end
 
+  describe Fastlane::Actions::RustoreUploadImagesAction do
+    it 'uploads to the current draft when version_id is omitted' do
+      allow(helper).to receive(:current_draft).and_return(12)
+      allow(helper).to receive(:upload_images)
+
+      expect(described_class.run(auth.merge(icon: 'icon.png'))).to eq(12)
+      expect(helper).to have_received(:upload_images).with(hash_including(version_id: 12, icon: 'icon.png'))
+    end
+
+    it 'needs something to upload' do
+      expect { described_class.run(auth) }.to raise_error(fastlane_error, /icon или/)
+    end
+  end
+
   describe 'plugin surface' do
     it 'registers every action with fastlane' do
       names = Fastlane::Actions.constants.map(&:to_s)
@@ -139,7 +153,7 @@ describe 'RuStore lifecycle actions' do
         'UploadToRuStoreAction', 'RustoreVersionStatusAction',
         'RustorePublishVersionAction', 'RustoreArchiveVersionAction',
         'RustorePublishSettingsAction', 'RustoreApplicationsAction',
-        'RustoreEditDraftAction', 'RustoreDeleteDraftAction'
+        'RustoreEditDraftAction', 'RustoreDeleteDraftAction', 'RustoreUploadImagesAction'
       )
     end
 
@@ -152,7 +166,8 @@ describe 'RuStore lifecycle actions' do
         Fastlane::Actions::RustorePublishSettingsAction,
         Fastlane::Actions::RustoreApplicationsAction,
         Fastlane::Actions::RustoreEditDraftAction,
-        Fastlane::Actions::RustoreDeleteDraftAction
+        Fastlane::Actions::RustoreDeleteDraftAction,
+        Fastlane::Actions::RustoreUploadImagesAction
       ].each do |action|
         expect(action.description).to be_a(String)
         expect(action.details).to be_a(String)
